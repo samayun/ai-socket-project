@@ -31,7 +31,7 @@ npm run dev
 ## Services
 
 - Backend API: http://localhost:3000
-- PostgreSQL: localhost:5433
+- PostgreSQL: localhost:5434
 - pgAdmin: http://localhost:5050
 
 ## Features

@@ -3,43 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Algorithm Visualizer</title>
+    <title>Tic Tac Toe with AI</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>AI Algorithm Visualizer</h1>
+        <h1>Tic Tac Toe</h1>
         
-        <div class="algorithm-selector">
-            <h2>Select Algorithm</h2>
-            <select id="algorithmSelect">
-                <option value="bfs">Breadth-First Search</option>
-                <option value="dfs">Depth-First Search</option>
-                <option value="nqueens">N-Queens</option>
-            </select>
+        <div class="game-info">
+            <div id="status">Player X's turn</div>
+            <div id="score">Score - X: 0 | O: 0</div>
         </div>
 
-        <div class="input-section">
-            <h2>Input</h2>
-            <div id="bfsInput" class="algorithm-input">
-                <input type="text" id="startNode" placeholder="Start Node">
-                <input type="text" id="endNode" placeholder="End Node">
-                <textarea id="graphInput" placeholder="Enter graph (format: A-B,B-C,C-D)"></textarea>
-            </div>
-            <div id="nqueensInput" class="algorithm-input" style="display: none;">
-                <input type="number" id="boardSize" placeholder="Board Size (N)" min="4" max="8" value="4">
-            </div>
+        <div class="game-board">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
         </div>
 
-        <button id="runButton">Run Algorithm</button>
+        <div class="controls">
+            <button id="resetBtn">Reset Board</button>
+            <button id="newGameBtn">New Game</button>
+        </div>
 
-        <div class="result-section">
-            <h2>Results</h2>
-            <div id="visualization"></div>
-            <pre id="resultOutput"></pre>
+        <div class="game-analytics">
+            <div class="moves-history">
+                <h3>Move History</h3>
+                <div id="movesList"></div>
+            </div>
+            <div class="prediction">
+                <h3>AI Prediction</h3>
+                <div id="predictionInfo"></div>
+            </div>
         </div>
     </div>
-    <script src="app.js"></script>
+
+    <!-- Game Over Alert -->
+    <div class="game-over-alert" id="gameOverAlert">
+        <div class="game-over-content">
+            <h2 class="game-over-title">Game Over!</h2>
+            <div class="game-over-winner" id="gameOverWinner"></div>
+            <div class="game-over-score" id="gameOverScore"></div>
+            <div class="game-over-buttons">
+                <button class="game-over-button" id="playAgainBtn">Play Again</button>
+                <button class="game-over-button secondary" id="newGameFromAlertBtn">New Game</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
 </body>
 </html> 
