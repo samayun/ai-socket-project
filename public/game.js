@@ -8,7 +8,9 @@ let gameState = {
   currentPlayer: 'X',
   scores: { X: 0, O: 0 },
   moveHistory: [],
-  players: new Set()
+  players: new Set(),
+  playerFingerprint: null,
+  ipAddress: null
 };
 
 // DOM Elements
@@ -121,6 +123,13 @@ function showGameOverAlert(winner, scores) {
   if (winner) {
     gameOverWinner.textContent = `Player ${winner} Wins!`;
     gameOverWinner.style.color = winner === 'X' ? 'var(--primary-color)' : 'var(--secondary-color)';
+    
+    // Add winning animation class to the winning cells
+    const winningCells = findWinningCells(gameState.board, winner);
+    winningCells.forEach(index => {
+      const cell = document.querySelector(`[data-cell="${index}"]`);
+      cell.classList.add('winning-cell');
+    });
   } else {
     gameOverWinner.textContent = "It's a Draw!";
     gameOverWinner.style.color = 'var(--text-color)';
@@ -131,42 +140,118 @@ function showGameOverAlert(winner, scores) {
   // Show alert with animation
   gameOverAlert.classList.add('show');
   
-  // Create confetti
+  // Create confetti with different colors
   createConfetti();
   
   // Clear any existing prediction
   updatePrediction(null);
+  
+  // Add keyboard event listener for Escape key
+  document.addEventListener('keydown', handleEscapeKey);
 }
 
-// Create confetti animation
+// Create confetti with different colors
 function createConfetti() {
-  // Clear existing confetti
-  const existingConfetti = document.querySelectorAll('.confetti');
-  existingConfetti.forEach(confetti => confetti.remove());
+  const colors = ['var(--primary-color)', 'var(--secondary-color)', '#FFD700', '#FF69B4'];
+  const confettiCount = 50;
   
-  // Create new confetti
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < confettiCount; i++) {
     const confetti = document.createElement('div');
     confetti.className = 'confetti';
+    confetti.style.left = Math.random() * 100 + 'vw';
+    confetti.style.width = Math.random() * 10 + 5 + 'px';
+    confetti.style.height = Math.random() * 10 + 5 + 'px';
+    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.animationDelay = Math.random() * 2 + 's';
+    document.body.appendChild(confetti);
     
-    // Random position, size, and animation delay
-    const size = Math.random() * 10 + 5;
-    const left = Math.random() * 100;
-    const delay = Math.random() * 3;
-    
-    confetti.style.width = `${size}px`;
-    confetti.style.height = `${size}px`;
-    confetti.style.left = `${left}%`;
-    confetti.style.animationDelay = `${delay}s`;
-    
-    gameOverAlert.appendChild(confetti);
+    // Remove confetti after animation
+    setTimeout(() => {
+      confetti.remove();
+    }, 5000);
+  }
+}
+
+// Find winning cells
+function findWinningCells(board, winner) {
+  const winPatterns = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+    [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+    [0, 4, 8], [2, 4, 6] // Diagonals
+  ];
+
+  for (const pattern of winPatterns) {
+    const [a, b, c] = pattern;
+    if (board[a] === winner && board[b] === winner && board[c] === winner) {
+      return pattern;
+    }
+  }
+  return [];
+}
+
+// Handle Escape key
+function handleEscapeKey(event) {
+  if (event.key === 'Escape') {
+    hideGameOverAlert();
   }
 }
 
 // Hide game over alert
 function hideGameOverAlert() {
   gameOverAlert.classList.remove('show');
+  document.removeEventListener('keydown', handleEscapeKey);
+  
+  // Remove winning cell highlights
+  document.querySelectorAll('.winning-cell').forEach(cell => {
+    cell.classList.remove('winning-cell');
+  });
 }
+
+// Generate a unique fingerprint for the player
+function generateFingerprint() {
+  // Check if we already have a fingerprint in localStorage
+  let fingerprint = localStorage.getItem('playerFingerprint');
+  
+  if (!fingerprint) {
+    // Generate a new fingerprint
+    fingerprint = 'player_' + Math.random().toString(36).substring(2, 15) + 
+                 '_' + Date.now().toString(36);
+    
+    // Store in localStorage
+    localStorage.setItem('playerFingerprint', fingerprint);
+  }
+  
+  return fingerprint;
+}
+
+// Get player's IP address
+async function getPlayerIP() {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    return data.ip;
+  } catch (error) {
+    console.error('Error getting IP address:', error);
+    return 'unknown';
+  }
+}
+
+// Initialize player data
+async function initializePlayerData() {
+  gameState.playerFingerprint = generateFingerprint();
+  gameState.ipAddress = await getPlayerIP();
+  
+  // Send player data to server
+  socket.emit('playerData', {
+    fingerprint: gameState.playerFingerprint,
+    ipAddress: gameState.ipAddress
+  });
+}
+
+// Call this function when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+  initializePlayerData();
+});
 
 // Handle cell click
 function handleCellClick(index) {
@@ -174,7 +259,9 @@ function handleCellClick(index) {
   
   socket.emit('makeMove', {
     roomId: gameState.roomId,
-    position: index
+    position: index,
+    playerFingerprint: gameState.playerFingerprint,
+    ipAddress: gameState.ipAddress
   });
 }
 
