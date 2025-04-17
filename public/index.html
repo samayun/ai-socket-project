@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Algorithm Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Algorithm Visualizer</h1>
+        
+        <div class="algorithm-selector">
+            <h2>Select Algorithm</h2>
+            <select id="algorithmSelect">
+                <option value="bfs">Breadth-First Search</option>
+                <option value="dfs">Depth-First Search</option>
+                <option value="nqueens">N-Queens</option>
+            </select>
+        </div>
+
+        <div class="input-section">
+            <h2>Input</h2>
+            <div id="bfsInput" class="algorithm-input">
+                <input type="text" id="startNode" placeholder="Start Node">
+                <input type="text" id="endNode" placeholder="End Node">
+                <textarea id="graphInput" placeholder="Enter graph (format: A-B,B-C,C-D)"></textarea>
+            </div>
+            <div id="nqueensInput" class="algorithm-input" style="display: none;">
+                <input type="number" id="boardSize" placeholder="Board Size (N)" min="4" max="8" value="4">
+            </div>
+        </div>
+
+        <button id="runButton">Run Algorithm</button>
+
+        <div class="result-section">
+            <h2>Results</h2>
+            <div id="visualization"></div>
+            <pre id="resultOutput"></pre>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html> 

@@ -1,0 +1,15 @@
+{
+    "Servers": {
+        "1": {
+            "Group": "Servers",
+            "Name": "AI Project",
+            "Host": "postgres",
+            "Port": 5432,
+            "MaintenanceDB": "ai_project",
+            "Username": "postgres",
+            "Password": "postgres",
+            "SSLMode": "prefer",
+            "Favorite": true
+        }
+    }
+}

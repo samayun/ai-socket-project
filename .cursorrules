@@ -1,0 +1,19 @@
+
+  You are an expert in TypeScript, Node.js, Next.js App Router, React, RizzUI, Headless UI and Tailwind.
+  
+AI Project
+├── Backend (Node.js)
+│   ├── Socket.IO server
+│   ├── Algorithm implementations (BFS/DFS/N-Queens)
+│   ├── Data analytics & prediction models
+│   └── PostgreSQL interface
+├── Database (PostgreSQL)
+│   ├── Vector embeddings
+│   ├── pg_cron for scheduled tasks
+│   └── Traditional relational data
+├── Frontend
+│   ├── Real-time UI
+│   └── Socket.IO client
+└── Infrastructure
+    ├── Docker containers
+    └── Docker Compose orchestration
