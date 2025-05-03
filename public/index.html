@@ -8,6 +8,127 @@
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <a href="/" class="navbar-item">
+                <span class="title">Tic Tac Toe AI</span>
+            </a>
+            <div class="navbar-burger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+
+        <div class="navbar-menu">
+            <div class="navbar-start">
+                <a href="/" class="navbar-item">Home</a>
+                <a href="/leaderboard.html" class="navbar-item">Leaderboard</a>
+            </div>
+
+            <div class="navbar-end">
+                <!-- Guest Buttons -->
+                <div class="guest-buttons">
+                    <button class="button is-primary" id="signup-modal-button">Sign Up</button>
+                    <button class="button is-light" id="signin-modal-button">Sign In</button>
+                </div>
+
+                <!-- Authenticated User Buttons -->
+                <div class="auth-buttons" style="display: none;">
+                    <div class="navbar-item has-dropdown">
+                        <a class="navbar-link">
+                            <span class="user-info"></span>
+                        </a>
+                        <div class="navbar-dropdown">
+                            <a href="/profile.html" class="navbar-item" id="profile-button">My Profile</a>
+                            <hr class="navbar-divider">
+                            <a class="navbar-item" id="logout-button">Logout</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sign Up Modal -->
+    <div class="modal" id="signup-modal">
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Sign Up</p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="signup-form">
+                    <div class="field">
+                        <label class="label">Username</label>
+                        <div class="control">
+                            <input class="input" type="text" id="signup-username" required>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Password</label>
+                        <div class="control">
+                            <input class="input" type="password" id="signup-password" required>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Display Name</label>
+                        <div class="control">
+                            <input class="input" type="text" id="signup-display-name" required>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Age</label>
+                        <div class="control">
+                            <input class="input" type="number" id="signup-age" min="0" max="18" required>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Parent's Email</label>
+                        <div class="control">
+                            <input class="input" type="email" id="signup-parent-email" required>
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-primary" id="signup-button">Sign Up</button>
+                <button class="button" id="signup-cancel">Cancel</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Sign In Modal -->
+    <div class="modal" id="signin-modal">
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Sign In</p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="signin-form">
+                    <div class="field">
+                        <label class="label">Username</label>
+                        <div class="control">
+                            <input class="input" type="text" id="signin-username" required>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Password</label>
+                        <div class="control">
+                            <input class="input" type="password" id="signin-password" required>
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-primary" id="signin-button">Sign In</button>
+                <button class="button" id="signin-cancel">Cancel</button>
+            </footer>
+        </div>
+    </div>
+
     <div class="container">
         <h1>Tic Tac Toe</h1>
         
@@ -59,5 +180,6 @@
     </div>
 
     <script src="game.js"></script>
+    <script src="navbar.js"></script>
 </body>
 </html> 
