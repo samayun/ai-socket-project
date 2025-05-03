@@ -1,7 +1,7 @@
 {
-  "name": "ai-tic-tac-toe",
+  "name": "tic-tac-toe",
   "version": "1.0.0",
-  "description": "AI-powered Tic Tac Toe game with real-time predictions using pgvector",
+  "description": "Tic Tac Toe game with real-time predictions using pgvector",
   "main": "server.js",
   "scripts": {
     "start": "node src/server.js",
