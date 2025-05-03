@@ -4,28 +4,10 @@ const { Server } = require("socket.io");
 const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
+const pgSession = require('connect-pg-simple')(session);
 const crypto = require("crypto");
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
-// Middleware
-app.use(express.json()); // Parse JSON request bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.use(
-  session({
-    secret: "your-secret-key",
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }, // Set to true in production with HTTPS
-  })
-);
-
-// Serve static files from the public directory
-app.use(express.static("public"));
-
-// PostgreSQL connection with pgvector
+// Initialize database pool first
 const pool = new Pool({
   user: process.env.DB_USER || "postgres",
   host: process.env.DB_HOST || "localhost",
@@ -34,13 +16,45 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5434,
 });
 
-// Game rooms storage
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+// Basic middleware setup
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
+
+// Session configuration
+const sessionMiddleware = session({
+  store: new pgSession({
+    pool: pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true
+  }),
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  rolling: true,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  },
+  name: 'userId'
+});
+
+// Apply session middleware
+app.use(sessionMiddleware);
+
+// Share session with Socket.IO
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+
 const gameRooms = new Map();
 
-// Player data storage
-const playerData = new Map();
-
-// League tiers
 const LEAGUE_TIERS = {
   BRONZE: { min: 0, max: 1000 },
   SILVER: { min: 1001, max: 2000 },
@@ -49,7 +63,6 @@ const LEAGUE_TIERS = {
   DIAMOND: { min: 4001, max: 5000 },
 };
 
-// Helper function to find a random empty cell
 function findRandomEmptyCell(board) {
   const emptyCells = board.reduce((acc, cell, index) => {
     if (cell === "") acc.push(index);
@@ -58,7 +71,6 @@ function findRandomEmptyCell(board) {
   return emptyCells[Math.floor(Math.random() * emptyCells.length)];
 }
 
-// Initialize database
 async function initializeDatabase() {
   try {
     // Drop all existing tables
@@ -116,208 +128,6 @@ async function initializeDatabase() {
   }
 }
 
-// Generate synthetic game history for AI predictions
-async function generateSyntheticGameHistory() {
-  try {
-    console.log("Generating synthetic game history...");
-
-    // Create synthetic players with different skill levels
-    const players = [];
-    const skillLevels = [800, 1000, 1200, 1500, 1800, 2000, 2200, 2500];
-
-    for (let i = 0; i < 20; i++) {
-      const fingerprint = `player_${i}`;
-      const skillLevel =
-        skillLevels[Math.floor(Math.random() * skillLevels.length)];
-
-      // Insert player profile
-      await pool.query(
-        `INSERT INTO player_profiles (fingerprint, ip_address, skill_level)
-                 VALUES ($1, $2, $3)
-                 ON CONFLICT (fingerprint) DO NOTHING`,
-        [fingerprint, `192.168.1.${i}`, skillLevel]
-      );
-
-      players.push({ fingerprint, skillLevel });
-    }
-
-    // Generate 1000+ synthetic games
-    const numGames = 1000;
-    const algorithms = ["minimax", "historical", "random"];
-
-    for (let gameId = 0; gameId < numGames; gameId++) {
-      // Select random players
-      const player1 = players[Math.floor(Math.random() * players.length)];
-      const player2 = players[Math.floor(Math.random() * players.length)];
-
-      // Skip if players are not properly defined
-      if (!player1 || !player2) {
-        console.error("Invalid player selection, skipping game");
-        continue;
-      }
-
-      // Simulate a game
-      let board = Array(9).fill("");
-      let currentPlayer = "X";
-      let moveNumber = 0;
-      let winner = null;
-
-      while (!isGameOver(board) && moveNumber < 9) {
-        const playerFingerprint =
-          currentPlayer === "X" ? player1.fingerprint : player2.fingerprint;
-        const playerSkillLevel =
-          currentPlayer === "X" ? player1.skillLevel : player2.skillLevel;
-
-        // Choose an algorithm based on player skill
-        const algorithm =
-          algorithms[Math.floor(Math.random() * algorithms.length)];
-
-        // Get prediction based on algorithm
-        let prediction;
-        if (algorithm === "minimax") {
-          prediction = GameAlgorithms.minimax([...board], playerSkillLevel);
-        } else if (algorithm === "historical") {
-          prediction = {
-            prediction: findRandomEmptyCell(board),
-            confidence: 0.7,
-            source: "historical",
-          };
-        } else {
-          prediction = {
-            prediction: findRandomEmptyCell(board),
-            confidence: 0.3,
-            source: "random",
-          };
-        }
-
-        // Make the move
-        const position = prediction.prediction;
-        if (position >= 0 && position < 9 && board[position] === "") {
-          board[position] = currentPlayer;
-
-          // Store the move
-          await storeGameState(
-            board,
-            prediction,
-            null,
-            playerFingerprint,
-            `192.168.1.${Math.floor(Math.random() * 255)}`,
-            playerSkillLevel,
-            moveNumber,
-            `synthetic_${gameId}`
-          );
-
-          // Check for winner
-          if (checkWinner(board) === currentPlayer) {
-            winner = currentPlayer;
-            break;
-          }
-
-          // Switch players
-          currentPlayer = currentPlayer === "X" ? "O" : "X";
-          moveNumber++;
-        } else {
-          // Invalid move, try again with a random empty cell
-          const randomPosition = findRandomEmptyCell(board);
-          if (randomPosition >= 0) {
-            board[randomPosition] = currentPlayer;
-
-            // Store the move
-            await storeGameState(
-              board,
-              {
-                prediction: randomPosition,
-                confidence: 0.1,
-                source: "fallback",
-              },
-              null,
-              playerFingerprint,
-              `192.168.1.${Math.floor(Math.random() * 255)}`,
-              playerSkillLevel,
-              moveNumber,
-              `synthetic_${gameId}`
-            );
-
-            // Check for winner
-            if (checkWinner(board) === currentPlayer) {
-              winner = currentPlayer;
-              break;
-            }
-
-            // Switch players
-            currentPlayer = currentPlayer === "X" ? "O" : "X";
-            moveNumber++;
-          } else {
-            // No empty cells, game is a draw
-            break;
-          }
-        }
-      }
-
-      // Store final game result
-      if (winner) {
-        const winnerFingerprint =
-          winner === "X" ? player1.fingerprint : player2.fingerprint;
-        const winnerSkillLevel =
-          winner === "X" ? player1.skillLevel : player2.skillLevel;
-
-        await storeGameState(
-          board,
-          null,
-          "win",
-          winnerFingerprint,
-          `192.168.1.${Math.floor(Math.random() * 255)}`,
-          winnerSkillLevel,
-          moveNumber,
-          `synthetic_${gameId}`
-        );
-
-        // Update player stats
-        await updatePlayerStats(winnerFingerprint, "win");
-
-        const loserFingerprint =
-          winner === "X" ? player2.fingerprint : player1.fingerprint;
-        await updatePlayerStats(loserFingerprint, "lose");
-      } else {
-        // Game is a draw
-        await storeGameState(
-          board,
-          null,
-          "draw",
-          player1.fingerprint,
-          `192.168.1.${Math.floor(Math.random() * 255)}`,
-          player1.skillLevel,
-          moveNumber,
-          `synthetic_${gameId}`
-        );
-
-        // Update player stats
-        await updatePlayerStats(player1.fingerprint, "draw");
-        await updatePlayerStats(player2.fingerprint, "draw");
-      }
-
-      // Log progress
-      if (gameId % 100 === 0) {
-        console.log(`Generated ${gameId} synthetic games`);
-      }
-    }
-
-    console.log(`Generated ${numGames} synthetic games successfully`);
-  } catch (error) {
-    console.error("Error generating synthetic game history:", error);
-  }
-}
-
-// Convert board state to vector format
-function boardToVector(board) {
-  return board.map((cell) => {
-    if (cell === "X") return 1;
-    if (cell === "O") return -1;
-    return 0; // Convert null or empty cells to 0
-  });
-}
-
-// Algorithm-based prediction functions
 function bfsPredictNextMove(board) {
   try {
     // BFS to find the best move
@@ -544,7 +354,6 @@ function nQueensPredictNextMove(board) {
   }
 }
 
-// Helper functions for algorithm predictions
 function getCurrentPlayer(board) {
   const xCount = board.filter((cell) => cell === "X").length;
   const oCount = board.filter((cell) => cell === "O").length;
@@ -555,53 +364,60 @@ function getOpponentPlayer(board) {
   return getCurrentPlayer(board) === "X" ? "O" : "X";
 }
 
-// Handle player data
 io.on("connection", (socket) => {
-  console.log("New client connected");
+  const session = socket.request.session;
+  const userId = session?.userId;
+  
+  if (!userId) {
+    console.log("No authenticated user found");
+    socket.disconnect();
+    return;
+  }
 
-  // Get client IP address
-  const ipAddress = socket.handshake.address;
-
+  console.log("User connected:", userId);
+  
   socket.on("playerData", async (data) => {
     try {
-      // Check if player already exists
-      const existingPlayer = await pool.query(
-        "SELECT * FROM player_profiles WHERE id = $1",
-        [data.id]
+      const session = socket.request.session;
+      
+      if (!session?.userId) {
+        socket.emit("error", { message: "Please sign in to play" });
+        return;
+      }
+
+      // Store socket connection
+      await pool.query(
+        "INSERT INTO player_sockets (socket_id, player_id) VALUES ($1, $2) ON CONFLICT (socket_id) DO UPDATE SET last_active = NOW()",
+        [socket.id, session.userId]
       );
 
-      if (existingPlayer.rows.length > 0) {
-        // Update existing player
-        await pool.query(
-          "UPDATE player_profiles SET ip_address = $1, last_seen = NOW() WHERE id = $2",
-          [ipAddress, data.id]
-        );
+      // Get player data
+      const playerResult = await pool.query(
+        "SELECT id, username, display_name FROM player_profiles WHERE id = $1",
+        [session.userId]
+      );
+
+      if (playerResult.rows.length > 0) {
         socket.emit("playerDataResponse", {
           success: true,
-          player: existingPlayer.rows[0],
+          player: playerResult.rows[0]
         });
       } else {
-        // Create new player profile
-        const newPlayer = await pool.query(
-          "INSERT INTO player_profiles (id, ip_address) VALUES ($1, $2) RETURNING *",
-          [data.id, ipAddress]
-        );
-        socket.emit("playerDataResponse", {
-          success: true,
-          player: newPlayer.rows[0],
-        });
+        socket.emit("error", { message: "Player profile not found" });
       }
     } catch (error) {
       console.error("Error handling player data:", error);
-      socket.emit("playerDataResponse", {
-        success: false,
-        error: "Failed to process player data",
-      });
+      socket.emit("error", { message: "Error processing player data" });
     }
   });
 
-  // Join game room
-  socket.on("joinRoom", (roomId) => {
+  socket.on("joinRoom", async (roomId) => {
+    const session = socket.request.session?.userId;
+    if (!session) {
+      socket.emit("error", { message: "Please sign in to play" });
+      return;
+    }
+
     socket.join(roomId);
 
     // Create room if it doesn't exist
@@ -629,6 +445,42 @@ io.on("connection", (socket) => {
       room.playerO = socket.id;
     }
 
+    // Get player display names
+    let playerXName = "Player X";
+    let playerOName = "Player O";
+
+    try {
+      // Get player X's display name
+      if (room.playerX) {
+        const xResult = await pool.query(
+          `SELECT p.display_name 
+           FROM player_profiles p
+           JOIN player_sockets s ON p.id = s.player_id
+           WHERE s.socket_id = $1`,
+          [room.playerX]
+        );
+        if (xResult.rows.length > 0) {
+          playerXName = xResult.rows[0].display_name;
+        }
+      }
+
+      // Get player O's display name
+      if (room.playerO) {
+        const oResult = await pool.query(
+          `SELECT p.display_name 
+           FROM player_profiles p
+           JOIN player_sockets s ON p.id = s.player_id
+           WHERE s.socket_id = $1`,
+          [room.playerO]
+        );
+        if (oResult.rows.length > 0) {
+          playerOName = oResult.rows[0].display_name;
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching player names:", error);
+    }
+
     // Notify room of new player
     io.to(roomId).emit("playerJoined", {
       playerId: socket.id,
@@ -638,14 +490,23 @@ io.on("connection", (socket) => {
       scores: room.scores,
       playerX: room.playerX,
       playerO: room.playerO,
+      playerXName,
+      playerOName
     });
   });
 
   // Make a move
   socket.on("makeMove", async (data) => {
-    const { roomId, position, playerFingerprint } = data;
-    const room = gameRooms.get(roomId);
+    // Check authentication
+    const session = socket.request.session;
+    if (!session?.userId) {
+      socket.emit("error", { message: "Please sign in to play" });
+      return;
+    }
 
+    const { roomId, position } = data;
+    const room = gameRooms.get(roomId);
+    
     if (!room) {
       socket.emit("error", { message: "Room not found" });
       return;
@@ -654,11 +515,9 @@ io.on("connection", (socket) => {
     // Check if it's the player's turn
     const isPlayerX = room.playerX === socket.id;
     const isPlayerO = room.playerO === socket.id;
-
-    if (
-      (room.currentPlayer === "X" && !isPlayerX) ||
-      (room.currentPlayer === "O" && !isPlayerO)
-    ) {
+    
+    if ((room.currentPlayer === "X" && !isPlayerX) || 
+        (room.currentPlayer === "O" && !isPlayerO)) {
       socket.emit("error", { message: "Not your turn!" });
       return;
     }
@@ -667,6 +526,40 @@ io.on("connection", (socket) => {
     if (room.board[position] || isGameOver(room.board)) {
       socket.emit("invalidMove", { message: "Invalid move" });
       return;
+    }
+
+    // Get player names
+    let playerXName = "Player X";
+    let playerOName = "Player O";
+    
+    try {
+      if (room.playerX) {
+        const xResult = await pool.query(
+          `SELECT p.display_name 
+           FROM player_profiles p
+           JOIN player_sockets s ON p.id = s.player_id
+           WHERE s.socket_id = $1`,
+          [room.playerX]
+        );
+        if (xResult.rows.length > 0) {
+          playerXName = xResult.rows[0].display_name;
+        }
+      }
+
+      if (room.playerO) {
+        const oResult = await pool.query(
+          `SELECT p.display_name 
+           FROM player_profiles p
+           JOIN player_sockets s ON p.id = s.player_id
+           WHERE s.socket_id = $1`,
+          [room.playerO]
+        );
+        if (oResult.rows.length > 0) {
+          playerOName = oResult.rows[0].display_name;
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching player names:", error);
     }
 
     // Make the move
@@ -686,6 +579,8 @@ io.on("connection", (socket) => {
       player: room.currentPlayer,
       board: room.board,
       moveHistory: room.moveHistory,
+      playerXName,
+      playerOName
     });
 
     if (prediction) {
@@ -703,25 +598,33 @@ io.on("connection", (socket) => {
         room.scores[winner]++;
       }
 
+      // Emit game over with player names
       io.to(roomId).emit("gameOver", {
         winner,
         scores: room.scores,
+        playerXName,
+        playerOName
       });
 
       // Store game state in database
-      await storeGameState(
-        room.board,
-        prediction,
-        winner,
-        playerFingerprint,
-        null,
-        null
-      );
+      const currentPlayerId = session.userId;
+      if (currentPlayerId) {
+        await storeGameState(
+          room.board,
+          prediction,
+          winner,
+          currentPlayerId,
+          null,
+          null
+        );
+      }
     } else {
       // Switch players
       room.currentPlayer = room.currentPlayer === "X" ? "O" : "X";
       io.to(roomId).emit("playerTurn", {
         currentPlayer: room.currentPlayer,
+        currentPlayerName: room.currentPlayer === "X" ? playerXName : playerOName,
+        nextPlayerName: room.currentPlayer === "X" ? playerOName : playerXName
       });
     }
   });
@@ -772,26 +675,119 @@ io.on("connection", (socket) => {
     socket.leave(roomId);
   });
 
-  // Disconnect
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-    // Remove player from all rooms
-    for (const [roomId, room] of gameRooms.entries()) {
-      if (room.players.has(socket.id)) {
-        room.players.delete(socket.id);
-        if (room.playerX === socket.id) room.playerX = null;
-        if (room.playerO === socket.id) room.playerO = null;
+  // Disconnect handler
+  socket.on("disconnect", async () => {
+    try {
+      // Remove socket connection
+      await pool.query(
+        "DELETE FROM player_sockets WHERE socket_id = $1",
+        [socket.id]
+      );
 
-        if (room.players.size === 0) {
-          gameRooms.delete(roomId);
-        } else {
-          io.to(roomId).emit("playerLeft", {
-            playerId: socket.id,
-            playerCount: room.players.size,
-          });
+      // Remove player from all rooms
+      for (const [roomId, room] of gameRooms.entries()) {
+        if (room.players.has(socket.id)) {
+          room.players.delete(socket.id);
+          if (room.playerX === socket.id) room.playerX = null;
+          if (room.playerO === socket.id) room.playerO = null;
+
+          if (room.players.size === 0) {
+            gameRooms.delete(roomId);
+          } else {
+            io.to(roomId).emit("playerLeft", {
+              playerId: socket.id,
+              playerCount: room.players.size,
+            });
+          }
         }
       }
+    } catch (error) {
+      console.error("Error handling disconnect:", error);
     }
+  });
+
+  // Handle game over
+  socket.on("gameOver", async (data) => {
+    const { winner, scores, playerXName, playerOName, roomId } = data;
+    
+    try {
+      // Get player IDs from socket connections
+      const xPlayerResult = await pool.query(
+        "SELECT player_id FROM player_sockets WHERE socket_id = $1",
+        [data.playerX]
+      );
+      const oPlayerResult = await pool.query(
+        "SELECT player_id FROM player_sockets WHERE socket_id = $1",
+        [data.playerO]
+      );
+
+      const xPlayerId = xPlayerResult.rows[0]?.player_id;
+      const oPlayerId = oPlayerResult.rows[0]?.player_id;
+
+      // Determine results for each player
+      const playerXResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
+      const playerOResult = winner === 'O' ? 'win' : winner === 'X' ? 'loss' : 'draw';
+
+      // Store game state
+      await pool.query(
+        `INSERT INTO game_states 
+         (room_id, player_x_id, player_o_id, board_state, winner, player_x_result, player_o_result, final_score, algorithm)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [roomId, xPlayerId, oPlayerId, data.board.join(''), winner, playerXResult, playerOResult, `${scores.X}-${scores.O}`, data.algorithm]
+      );
+
+      // Update player statistics and store game history
+      if (xPlayerId) {
+        await pool.query(
+          `UPDATE player_profiles 
+           SET games_played = games_played + 1,
+               wins = wins + ${playerXResult === "win" ? 1 : 0},
+               losses = losses + ${playerXResult === "loss" ? 1 : 0},
+               draws = draws + ${playerXResult === "draw" ? 1 : 0},
+               last_seen = NOW()
+           WHERE id = $1`,
+          [xPlayerId]
+        );
+
+        // Store game history for player X
+        await pool.query(
+          `INSERT INTO game_history 
+           (player_id, opponent_id, result, score, algorithm)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [xPlayerId, oPlayerId, playerXResult, `${scores.X}-${scores.O}`, data.algorithm]
+        );
+      }
+
+      if (oPlayerId) {
+        await pool.query(
+          `UPDATE player_profiles 
+           SET games_played = games_played + 1,
+               wins = wins + ${playerOResult === "win" ? 1 : 0},
+               losses = losses + ${playerOResult === "loss" ? 1 : 0},
+               draws = draws + ${playerOResult === "draw" ? 1 : 0},
+               last_seen = NOW()
+           WHERE id = $1`,
+          [oPlayerId]
+        );
+
+        // Store game history for player O
+        await pool.query(
+          `INSERT INTO game_history 
+           (player_id, opponent_id, result, score, algorithm)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [oPlayerId, xPlayerId, playerOResult, `${scores.X}-${scores.O}`, data.algorithm]
+        );
+      }
+    } catch (error) {
+      console.error("Error updating game statistics:", error);
+    }
+
+    io.to(roomId).emit("gameOver", {
+      winner,
+      scores,
+      playerXName,
+      playerOName
+    });
   });
 });
 
@@ -995,28 +991,44 @@ async function getAlgorithmPrediction(board, algorithm) {
 
 // Store game state in database
 async function storeGameState(boardState, nextMove, result, playerId, skillLevel, algorithm) {
-    try {
-        // Convert board state to string format
-        const boardStateStr = boardState.join(",");
+  try {
+    // Convert board state to string format
+    const boardStateStr = boardState.join(",");
 
-        // Ensure playerId is a string
-        const playerIdStr = String(playerId);
-
-        // Extract prediction value if nextMove is an object
-        const nextMoveValue = nextMove?.prediction ?? nextMove;
-
-        // Store game state
-        await pool.query(
-            `INSERT INTO game_states 
-            (board_state, next_move, result, player_id, skill_level, algorithm)
-            VALUES ($1, $2, $3, $4, $5, $6)`,
-            [boardStateStr, nextMoveValue, result, playerIdStr, skillLevel, algorithm]
-        );
-        console.log("Game state stored successfully");
-    } catch (error) {
-        console.error("Error storing game state:", error);
-        throw error;
+    // Ensure playerId is a string and not null
+    if (!playerId) {
+      console.error("Cannot store game state: playerId is required");
+      return;
     }
+
+    const playerIdStr = String(playerId);
+
+    // Verify player exists in database
+    const playerCheck = await pool.query(
+      "SELECT id FROM player_profiles WHERE id = $1",
+      [playerIdStr]
+    );
+
+    if (playerCheck.rows.length === 0) {
+      console.error("Cannot store game state: player not found in database");
+      return;
+    }
+
+    // Extract prediction value if nextMove is an object
+    const nextMoveValue = nextMove?.prediction ?? nextMove;
+
+    // Store game state
+    await pool.query(
+      `INSERT INTO game_states 
+      (board_state, next_move, result, player_id, skill_level, algorithm)
+      VALUES ($1, $2, $3, $4, $5, $6)`,
+      [boardStateStr, nextMoveValue, result, playerIdStr, skillLevel, algorithm]
+    );
+    console.log("Game state stored successfully");
+  } catch (error) {
+    console.error("Error storing game state:", error);
+    throw error;
+  }
 }
 
 function createGameRoom(roomId) {
@@ -1173,10 +1185,100 @@ app.post("/api/auth/logout", (req, res) => {
   });
 });
 
+// Profile endpoints
+app.get("/api/profile", async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    // Get player profile
+    const profileResult = await pool.query(
+      `SELECT id, username, display_name, games_played, wins, losses, draws, skill_level
+       FROM player_profiles
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (profileResult.rows.length === 0) {
+      return res.status(404).json({ error: "Player not found" });
+    }
+
+    // Get game history
+    const historyResult = await pool.query(
+      `SELECT 
+        gh.created_at,
+        gh.result,
+        gh.score,
+        gh.algorithm,
+        pp.display_name as opponent_name
+       FROM game_history gh
+       LEFT JOIN player_profiles pp ON gh.opponent_id = pp.id
+       WHERE gh.player_id = $1
+       ORDER BY gh.created_at DESC
+       LIMIT 50`,
+      [userId]
+    );
+
+    res.json({
+      ...profileResult.rows[0],
+      game_history: historyResult.rows
+    });
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    res.status(500).json({ error: "Error fetching profile" });
+  }
+});
+
+app.get("/api/profile/history", async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    // Get game history with player information
+    const result = await pool.query(
+      `SELECT 
+        gs.id,
+        gs.created_at,
+        gs.result,
+        gs.algorithm,
+        gs.player_id,
+        gs.skill_level,
+        pp.display_name as player_name
+       FROM game_states gs
+       LEFT JOIN player_profiles pp ON gs.player_id = pp.id
+       WHERE gs.player_id = $1
+       ORDER BY gs.created_at DESC
+       LIMIT 50`,
+      [userId]
+    );
+
+    // Transform the results to include opponent information
+    const history = result.rows.map(game => ({
+      id: game.id,
+      created_at: game.created_at,
+      result: game.result,
+      algorithm: game.algorithm,
+      player_name: game.player_name,
+      skill_level: game.skill_level
+    }));
+
+    res.json(history);
+  } catch (error) {
+    console.error("Error fetching game history:", error);
+    res.status(500).json({ error: "Error fetching game history" });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
   console.log(`Server running : http://localhost:${PORT}`);
 });
 
-initializeDatabase();
+// initializeDatabase();

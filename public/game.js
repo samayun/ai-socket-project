@@ -11,7 +11,9 @@ const gameState = {
   playerStats: null,
   roomId: null,
   isPlayerX: false,
-  isPlayerO: false
+  isPlayerO: false,
+  playerXName: null,
+  playerOName: null
 };
 
 // DOM Elements
@@ -83,8 +85,21 @@ function updateStatus() {
 }
 
 // Update score display
-function updateScore() {
-  scoreElement.textContent = `Score - X: ${gameState.scores.X} | O: ${gameState.scores.O}`;
+function updateScore(scores, playerXName, playerOName) {
+  const scoreElement = document.getElementById("score");
+  if (scoreElement) {
+    // Ensure we have valid names, fallback to "Player X/O" if undefined
+    const xName = playerXName || "Player X";
+    const oName = playerOName || "Player O";
+    
+    scoreElement.innerHTML = `
+      <div class="text-lg font-semibold">
+        <span class="text-blue-500">${xName}: ${scores.X || 0}</span>
+        <span class="text-gray-400 mx-2">|</span>
+        <span class="text-red-500">${oName}: ${scores.O || 0}</span>
+      </div>
+    `;
+  }
 }
 
 // Update move history
@@ -128,37 +143,33 @@ function updatePrediction(prediction) {
   }
 }
 
-// Show game over alert with confetti
-function showGameOverAlert(winner, scores) {
-  // Update alert content
-  if (winner) {
-    gameOverWinner.textContent = `Player ${winner} Wins!`;
-    gameOverWinner.style.color = winner === 'X' ? 'var(--primary-color)' : 'var(--secondary-color)';
-    
-    // Add winning animation class to the winning cells
-    const winningCells = findWinningCells(gameState.board, winner);
-    winningCells.forEach(index => {
-      const cell = document.querySelector(`[data-cell="${index}"]`);
-      cell.classList.add('winning-cell');
-    });
-  } else {
-    gameOverWinner.textContent = "It's a Draw!";
-    gameOverWinner.style.color = 'var(--text-color)';
-  }
+// Show game over alert
+function showGameOverAlert(winner, scores, playerXName, playerOName) {
+  const alertDiv = document.createElement("div");
+  alertDiv.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
   
-  gameOverScore.textContent = `Final Score - X: ${scores.X} | O: ${scores.O}`;
+  // Ensure we have valid names
+  const xName = playerXName || "Player X";
+  const oName = playerOName || "Player O";
   
-  // Show alert with animation
-  gameOverAlert.classList.add('show');
-  
-  // Create confetti with different colors
-  createConfetti();
-  
-  // Clear any existing prediction
-  updatePrediction(null);
-  
-  // Add keyboard event listener for Escape key
-  document.addEventListener('keydown', handleEscapeKey);
+  alertDiv.innerHTML = `
+    <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+      <h2 class="text-2xl font-bold mb-4 text-center">
+        ${winner ? `🎉 ${winner === "X" ? xName : oName} Won!` : "Game Draw!"}
+      </h2>
+      <div class="text-center mb-4">
+        <p class="text-lg">
+          Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}
+        </p>
+      </div>
+      <div class="flex justify-center">
+        <button onclick="startNewGame()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+          Play Again
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(alertDiv);
 }
 
 // Create confetti with different colors
@@ -323,33 +334,53 @@ newGameFromAlertBtn.addEventListener('click', () => {
 
 // Socket.IO event handlers
 socket.on('playerJoined', (data) => {
-  gameState.board = data.board;
-  gameState.currentPlayer = data.currentPlayer;
-  gameState.scores = data.scores;
-  gameState.isPlayerX = socket.id === data.playerX;
-  gameState.isPlayerO = socket.id === data.playerO;
+  const { playerId, playerCount, currentPlayer, board, scores, playerX, playerO, playerXName, playerOName } = data;
   
+  // Update game state
+  gameState.board = board;
+  gameState.currentPlayer = currentPlayer;
+  gameState.scores = scores;
+  gameState.isPlayerX = socket.id === playerX;
+  gameState.isPlayerO = socket.id === playerO;
+  gameState.playerXName = playerXName || "Player X";
+  gameState.playerOName = playerOName || "Player O";
+  
+  // Update UI
   updateBoard();
-  updateStatus();
-  updateScore();
+  updateScore(scores, gameState.playerXName, gameState.playerOName);
+  updateTurnDisplay(
+    currentPlayer,
+    currentPlayer === "X" ? gameState.playerXName : gameState.playerOName,
+    currentPlayer === "X" ? gameState.playerOName : gameState.playerXName
+  );
   
-  if (data.playerCount === 2) {
-    gameState.gameStatus = 'playing';
+  if (playerCount === 2) {
+    gameState.gameStatus = "playing";
     updateStatus();
   }
 });
 
 socket.on('moveMade', (data) => {
-  gameState.board = data.board;
-  gameState.moveHistory = data.moveHistory;
+  const { position, player, board, playerXName, playerOName } = data;
   
+  // Update game state
+  gameState.board = board;
+  gameState.playerXName = playerXName || gameState.playerXName || "Player X";
+  gameState.playerOName = playerOName || gameState.playerOName || "Player O";
+  
+  // Update UI
   updateBoard();
-  updateMoveHistory();
+  updateScore(gameState.scores, gameState.playerXName, gameState.playerOName);
+  updateTurnDisplay(
+    player === "X" ? "O" : "X",
+    player === "X" ? gameState.playerOName : gameState.playerXName,
+    player === "X" ? gameState.playerXName : gameState.playerOName
+  );
   
   // Check if the game is over after the move
   if (isGameOver(data.board)) {
     const winner = checkWinner(data.board);
-    showGameOverAlert(winner, gameState.scores);
+    showGameOverAlert(winner, data.scores, data.playerXName, data.playerOName);
   }
 });
 
@@ -362,27 +393,28 @@ socket.on('prediction', (data) => {
 });
 
 socket.on('gameOver', (data) => {
-  gameState.scores = data.scores;
-  updateScore();
+  const { winner, scores, playerXName, playerOName } = data;
   
-  if (data.winner) {
-    updateStatus(`Player ${data.winner} wins!`);
-    const result = checkWinner(gameState.board);
-    showGameOverAlert(result.winner, data.scores, result.winningCells, result.winner === gameState.currentPlayer);
-  } else {
-    updateStatus("It's a draw!");
-  }
+  // Update game state
+  gameState.scores = scores;
+  gameState.playerXName = playerXName || gameState.playerXName || "Player X";
+  gameState.playerOName = playerOName || gameState.playerOName || "Player O";
   
-  showGameOverAlert(data.winner, data.scores);
+  // Update UI
+  updateScore(scores, gameState.playerXName, gameState.playerOName);
+  showGameOverAlert(winner, scores, gameState.playerXName, gameState.playerOName);
 });
 
 socket.on('boardReset', (data) => {
   gameState.board = data.board;
   gameState.currentPlayer = data.currentPlayer;
   gameState.moveHistory = [];
+  gameState.playerXName = data.playerXName;
+  gameState.playerOName = data.playerOName;
   
   updateBoard();
-  updateStatus(`Player ${data.currentPlayer}'s turn`);
+  updateStatus();
+  updateScore(gameState.scores, gameState.playerXName, gameState.playerOName);
   updateMoveHistory();
   updatePrediction(null);
 });
@@ -392,10 +424,12 @@ socket.on('gameStarted', (data) => {
   gameState.currentPlayer = data.currentPlayer;
   gameState.scores = data.scores;
   gameState.moveHistory = [];
+  gameState.playerXName = data.playerXName;
+  gameState.playerOName = data.playerOName;
   
   updateBoard();
-  updateStatus(`Player ${data.currentPlayer}'s turn`);
-  updateScore();
+  updateStatus();
+  updateScore(gameState.scores, gameState.playerXName, gameState.playerOName);
   updateMoveHistory();
   updatePrediction(null);
 });
@@ -415,11 +449,11 @@ socket.on('invalidMove', (data) => {
 });
 
 socket.on('error', (data) => {
-  alert(data.message);
-  if (data.message.includes('Room is full')) {
-    const newRoomId = joinRoom();
-    const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
-    alert(`Room was full. Created new room. Share this link with your opponent: ${shareLink}`);
+  if (data.message === "Please sign in to play") {
+    // Redirect to login page or show login modal
+    window.location.href = "/login.html";
+  } else {
+    alert(data.message);
   }
 });
 
@@ -441,4 +475,65 @@ function checkWinner(board) {
     }
   }
   return null;
-} 
+}
+
+// Check authentication status on page load
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const response = await fetch("/api/auth/status");
+    const data = await response.json();
+    
+    if (!data.authenticated) {
+      // Redirect to login page if not authenticated
+      window.location.href = "/login.html";
+    }
+  } catch (error) {
+    console.error("Error checking authentication:", error);
+    window.location.href = "/login.html";
+  }
+});
+
+// Update the turn display
+function updateTurnDisplay(currentPlayer, currentPlayerName, nextPlayerName) {
+  const turnDisplay = document.getElementById("turnDisplay");
+  if (turnDisplay) {
+    // Ensure we have valid names, fallback to "Player X/O" if undefined
+    const currentName = currentPlayerName || `Player ${currentPlayer}`;
+    const nextName = nextPlayerName || `Player ${currentPlayer === "X" ? "O" : "X"}`;
+    
+    turnDisplay.innerHTML = `
+      <div class="text-lg font-semibold">
+        <span class="${currentPlayer === "X" ? "text-blue-500" : "text-red-500"}">
+          ${currentName}'s Turn
+        </span>
+        <span class="text-gray-400">(Playing as ${currentPlayer})</span>
+      </div>
+      <div class="text-sm text-gray-400">
+        Next: ${nextName}
+      </div>
+    `;
+  }
+}
+
+// Handle player turn events
+socket.on("playerTurn", (data) => {
+  const { currentPlayer, currentPlayerName, nextPlayerName } = data;
+  updateTurnDisplay(currentPlayer, currentPlayerName, nextPlayerName);
+});
+
+// Handle move made events
+socket.on("moveMade", (data) => {
+  const { position, player, board, playerXName, playerOName } = data;
+  updateBoard(board);
+  updateTurnDisplay(
+    player === "X" ? "O" : "X",
+    player === "X" ? playerOName : playerXName,
+    player === "X" ? playerXName : playerOName
+  );
+});
+
+// Handle game over events
+socket.on("gameOver", (data) => {
+  const { winner, scores, playerXName, playerOName } = data;
+  showGameOverAlert(winner, scores, playerXName, playerOName);
+}); 

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Tic Tac Toe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .form-input:focus {
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg flex items-center justify-center p-4">
+    <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-2xl">
+        <div class="text-center">
+            <h2 class="text-3xl font-extrabold text-gray-900">Create Account</h2>
+            <p class="mt-2 text-sm text-gray-600">Join us to play Tic Tac Toe</p>
+        </div>
+        <form id="signupForm" class="mt-8 space-y-6">
+            <div class="rounded-md shadow-sm space-y-4">
+                <div>
+                    <label for="username" class="sr-only">Username</label>
+                    <input id="username" name="username" type="text" required 
+                        class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm form-input"
+                        placeholder="Username">
+                </div>
+                <div>
+                    <label for="displayName" class="sr-only">Display Name</label>
+                    <input id="displayName" name="displayName" type="text" required 
+                        class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm form-input"
+                        placeholder="Display Name">
+                </div>
+                <div>
+                    <label for="password" class="sr-only">Password</label>
+                    <input id="password" name="password" type="password" required 
+                        class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm form-input"
+                        placeholder="Password">
+                </div>
+                <div>
+                    <label for="confirmPassword" class="sr-only">Confirm Password</label>
+                    <input id="confirmPassword" name="confirmPassword" type="password" required 
+                        class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm form-input"
+                        placeholder="Confirm Password">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <div class="text-sm">
+                    <a href="/login.html" class="font-medium text-indigo-600 hover:text-indigo-500">
+                        Already have an account? Sign in
+                    </a>
+                </div>
+            </div>
+
+            <div>
+                <button type="submit" 
+                    class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                    Sign up
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const displayName = document.getElementById('displayName').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (password !== confirmPassword) {
+                alert('Passwords do not match!');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, displayName, password }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Redirect to game page
+                    window.location.href = '/game.html';
+                } else {
+                    alert(data.error || 'Signup failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Signup error:', error);
+                alert('An error occurred. Please try again.');
+            }
+        });
+    </script>
+</body>
+</html> 
