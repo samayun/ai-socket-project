@@ -945,7 +945,7 @@ async function storeGameState(boardState, nextMove, result, playerFingerprint, s
     }
 }
 
-// Create a new game room
+
 function createGameRoom(roomId) {
   return {
     id: roomId,
@@ -957,7 +957,7 @@ function createGameRoom(roomId) {
   };
 }
 
-// Initialize database and start server
+
 const PORT = process.env.PORT || 3000;
 initializeDatabase().then(() => {
   server.listen(PORT, () => {

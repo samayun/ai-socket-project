@@ -336,12 +336,12 @@ socket.on('gameOver', (data) => {
   
   if (data.winner) {
     updateStatus(`Player ${data.winner} wins!`);
+    const result = checkWinner(gameState.board);
+    showGameOverAlert(result.winner, data.scores, result.winningCells, result.winner === gameState.currentPlayer);
   } else {
     updateStatus("It's a draw!");
   }
-  
-  // Show game over alert
-  showGameOverAlert(data.winner, data.scores);
+
 });
 
 socket.on('boardReset', (data) => {
