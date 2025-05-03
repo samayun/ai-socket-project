@@ -2,15 +2,16 @@
 const socket = io();
 
 // Game state
-let gameState = {
-  roomId: null,
+const gameState = {
   board: Array(9).fill(null),
   currentPlayer: 'X',
-  scores: { X: 0, O: 0 },
-  moveHistory: [],
-  players: new Set(),
+  gameStatus: 'waiting',
   playerFingerprint: null,
-  ipAddress: null
+  playerName: null,
+  playerStats: null,
+  roomId: null,
+  isPlayerX: false,
+  isPlayerO: false
 };
 
 // DOM Elements
@@ -67,8 +68,18 @@ function updateBoard() {
 }
 
 // Update status display
-function updateStatus(message) {
-  statusElement.textContent = message;
+function updateStatus() {
+  if (!statusElement) return;
+  
+  if (gameState.gameStatus === 'waiting') {
+    statusElement.textContent = 'Waiting for opponent...';
+  } else if (gameState.gameStatus === 'over') {
+    statusElement.textContent = 'Game Over';
+  } else {
+    const isMyTurn = (gameState.currentPlayer === 'X' && gameState.isPlayerX) || 
+                     (gameState.currentPlayer === 'O' && gameState.isPlayerO);
+    statusElement.textContent = isMyTurn ? 'Your turn!' : 'Opponent\'s turn';
+  }
 }
 
 // Update score display
@@ -239,12 +250,14 @@ async function getPlayerIP() {
 // Initialize player data
 async function initializePlayerData() {
   gameState.playerFingerprint = generateFingerprint();
+  gameState.playerName = prompt('Please enter your name:');
   gameState.ipAddress = await getPlayerIP();
   
   // Send player data to server
   socket.emit('playerData', {
     fingerprint: gameState.playerFingerprint,
-    ipAddress: gameState.ipAddress
+    ipAddress: gameState.ipAddress,
+    name: gameState.playerName
   });
 }
 
@@ -254,14 +267,26 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Handle cell click
-function handleCellClick(index) {
-  if (gameState.board[index] || !gameState.roomId) return;
+function handleCellClick(position) {
+  if (!gameState.roomId) {
+    alert('Please join a room first');
+    return;
+  }
+  
+  if (gameState.board[position] || gameState.gameStatus === 'over') {
+    return;
+  }
+  
+  // Check if it's the player's turn
+  if ((gameState.currentPlayer === 'X' && !gameState.isPlayerX) || 
+      (gameState.currentPlayer === 'O' && !gameState.isPlayerO)) {
+    return;
+  }
   
   socket.emit('makeMove', {
     roomId: gameState.roomId,
-    position: index,
-    playerFingerprint: gameState.playerFingerprint,
-    ipAddress: gameState.ipAddress
+    position,
+    playerFingerprint: gameState.playerFingerprint
   });
 }
 
@@ -298,14 +323,20 @@ newGameFromAlertBtn.addEventListener('click', () => {
 
 // Socket.IO event handlers
 socket.on('playerJoined', (data) => {
-  gameState.players.add(data.playerId);
   gameState.board = data.board;
   gameState.currentPlayer = data.currentPlayer;
   gameState.scores = data.scores;
+  gameState.isPlayerX = socket.id === data.playerX;
+  gameState.isPlayerO = socket.id === data.playerO;
   
   updateBoard();
-  updateStatus(`Player ${data.playerCount === 1 ? 'waiting for opponent' : 'joined'}`);
+  updateStatus();
   updateScore();
+  
+  if (data.playerCount === 2) {
+    gameState.gameStatus = 'playing';
+    updateStatus();
+  }
 });
 
 socket.on('moveMade', (data) => {
@@ -342,7 +373,6 @@ socket.on('gameOver', (data) => {
     updateStatus("It's a draw!");
   }
   
-
   showGameOverAlert(data.winner, data.scores);
 });
 
@@ -372,12 +402,12 @@ socket.on('gameStarted', (data) => {
 
 socket.on('playerTurn', (data) => {
   gameState.currentPlayer = data.currentPlayer;
-  updateStatus(`Player ${data.currentPlayer}'s turn`);
+  updateStatus();
 });
 
 socket.on('playerLeft', (data) => {
-  gameState.players.delete(data.playerId);
-  updateStatus(`Player left. ${data.playerCount} player${data.playerCount === 1 ? '' : 's'} remaining`);
+  gameState.gameStatus = 'waiting';
+  updateStatus();
 });
 
 socket.on('invalidMove', (data) => {
@@ -393,11 +423,9 @@ socket.on('error', (data) => {
   }
 });
 
-
 function isGameOver(board) {
   return checkWinner(board) || board.every(cell => cell !== null);
 }
-
 
 function checkWinner(board) {
   const winPatterns = [

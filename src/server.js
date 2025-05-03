@@ -538,23 +538,41 @@ io.on('connection', (socket) => {
     
     room.players.add(socket.id);
     
+    // Assign player to X or O
+    if (room.playerX === null) {
+      room.playerX = socket.id;
+    } else if (room.playerO === null) {
+      room.playerO = socket.id;
+    }
+    
     // Notify room of new player
     io.to(roomId).emit('playerJoined', {
       playerId: socket.id,
       playerCount: room.players.size,
       currentPlayer: room.currentPlayer,
       board: room.board,
-      scores: room.scores
+      scores: room.scores,
+      playerX: room.playerX,
+      playerO: room.playerO
     });
   });
 
   // Make a move
   socket.on('makeMove', async (data) => {
-    const { roomId, position } = data;
+    const { roomId, position, playerFingerprint } = data;
     const room = gameRooms.get(roomId);
     
     if (!room) {
       socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+
+    // Check if it's the player's turn
+    const isPlayerX = room.playerX === socket.id;
+    const isPlayerO = room.playerO === socket.id;
+    
+    if ((room.currentPlayer === 'X' && !isPlayerX) || (room.currentPlayer === 'O' && !isPlayerO)) {
+      socket.emit('error', { message: 'Not your turn!' });
       return;
     }
     
@@ -573,7 +591,7 @@ io.on('connection', (socket) => {
     });
     
     // Get AI prediction
-    const prediction = await predictNextMove(room.board, null, null);
+    const prediction = await predictNextMove(room.board, playerFingerprint);
     
     // Broadcast the move and prediction
     io.to(roomId).emit('moveMade', {
@@ -604,7 +622,7 @@ io.on('connection', (socket) => {
       });
       
       // Store game state in database
-      await storeGameState(room.board, prediction, winner, null, null, null, null, null);
+      await storeGameState(room.board, prediction, winner, playerFingerprint, null, null);
     } else {
       // Switch players
       room.currentPlayer = room.currentPlayer === 'X' ? 'O' : 'X';
@@ -667,6 +685,9 @@ io.on('connection', (socket) => {
     for (const [roomId, room] of gameRooms.entries()) {
       if (room.players.has(socket.id)) {
         room.players.delete(socket.id);
+        if (room.playerX === socket.id) room.playerX = null;
+        if (room.playerO === socket.id) room.playerO = null;
+        
         if (room.players.size === 0) {
           gameRooms.delete(roomId);
         } else {
@@ -953,18 +974,18 @@ async function storeGameState(boardState, nextMove, result, playerFingerprint, s
     }
 }
 
-
 function createGameRoom(roomId) {
   return {
     id: roomId,
     board: Array(9).fill(null),
     currentPlayer: 'X',
     players: new Set(),
+    playerX: null,
+    playerO: null,
     scores: { X: 0, O: 0 },
     moveHistory: []
   };
 }
-
 
 const PORT = process.env.PORT || 3000;
 initializeDatabase().then(() => {
