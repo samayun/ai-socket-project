@@ -7,7 +7,6 @@ const session = require("express-session");
 const pgSession = require('connect-pg-simple')(session);
 const crypto = require("crypto");
 
-// Initialize database pool first
 const pool = new Pool({
   user: process.env.DB_USER || "postgres",
   host: process.env.DB_HOST || "localhost",
@@ -385,26 +384,40 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Store socket connection
-      await pool.query(
-        "INSERT INTO player_sockets (socket_id, player_id) VALUES ($1, $2) ON CONFLICT (socket_id) DO UPDATE SET last_active = NOW()",
-        [socket.id, session.userId]
-      );
-
-      // Get player data
-      const playerResult = await pool.query(
+      // First check if player exists
+      const playerExists = await pool.query(
         "SELECT id, username, display_name FROM player_profiles WHERE id = $1",
         [session.userId]
       );
 
-      if (playerResult.rows.length > 0) {
-        socket.emit("playerDataResponse", {
-          success: true,
-          player: playerResult.rows[0]
-        });
-      } else {
+      if (playerExists.rows.length === 0) {
         socket.emit("error", { message: "Player profile not found" });
+        return;
       }
+
+      // Store socket connection
+      await pool.query(
+        `INSERT INTO player_sockets (socket_id, player_id) 
+         VALUES ($1, $2) 
+         ON CONFLICT (socket_id) 
+         DO UPDATE SET 
+           player_id = EXCLUDED.player_id,
+           last_active = NOW()`,
+        [socket.id, session.userId]
+      );
+
+      // Return player data
+      socket.emit("playerDataResponse", {
+        success: true,
+        player: playerExists.rows[0]
+      });
+
+      console.log("Player data stored successfully:", {
+        socketId: socket.id,
+        playerId: session.userId,
+        username: playerExists.rows[0].username
+      });
+
     } catch (error) {
       console.error("Error handling player data:", error);
       socket.emit("error", { message: "Error processing player data" });
@@ -607,17 +620,16 @@ io.on("connection", (socket) => {
       });
 
       // Store game state in database
-      const currentPlayerId = session.userId;
-      if (currentPlayerId) {
-        await storeGameState(
-          room.board,
-          prediction,
-          winner,
-          currentPlayerId,
-          null,
-          null
-        );
-      }
+      await storeGameState(
+        room.board,
+        prediction,
+        winner ? 'win' : 'draw',
+        session.userId,
+        roomId,
+        prediction?.algorithm || 'default',
+        room.scores,
+        room
+      );
     } else {
       // Switch players
       room.currentPlayer = room.currentPlayer === "X" ? "O" : "X";
@@ -709,20 +721,29 @@ io.on("connection", (socket) => {
   // Handle game over
   socket.on("gameOver", async (data) => {
     const { winner, scores, playerXName, playerOName, roomId } = data;
+    const room = gameRooms.get(roomId);
+    
+    if (!room) return;
     
     try {
       // Get player IDs from socket connections
       const xPlayerResult = await pool.query(
-        "SELECT player_id FROM player_sockets WHERE socket_id = $1",
-        [data.playerX]
+        `SELECT p.id 
+         FROM player_profiles p
+         JOIN player_sockets s ON p.id = s.player_id
+         WHERE s.socket_id = $1`,
+        [room.playerX]
       );
       const oPlayerResult = await pool.query(
-        "SELECT player_id FROM player_sockets WHERE socket_id = $1",
-        [data.playerO]
+        `SELECT p.id 
+         FROM player_profiles p
+         JOIN player_sockets s ON p.id = s.player_id
+         WHERE s.socket_id = $1`,
+        [room.playerO]
       );
 
-      const xPlayerId = xPlayerResult.rows[0]?.player_id;
-      const oPlayerId = oPlayerResult.rows[0]?.player_id;
+      const xPlayerId = xPlayerResult.rows[0]?.id;
+      const oPlayerId = oPlayerResult.rows[0]?.id;
 
       // Determine results for each player
       const playerXResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
@@ -733,17 +754,18 @@ io.on("connection", (socket) => {
         `INSERT INTO game_states 
          (room_id, player_x_id, player_o_id, board_state, winner, player_x_result, player_o_result, final_score, algorithm)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [roomId, xPlayerId, oPlayerId, data.board.join(''), winner, playerXResult, playerOResult, `${scores.X}-${scores.O}`, data.algorithm]
+        [roomId, xPlayerId, oPlayerId, room.board.join(''), winner, playerXResult, playerOResult, `${scores.X}-${scores.O}`, data.algorithm]
       );
 
       // Update player statistics and store game history
       if (xPlayerId) {
+        // Update player X stats
         await pool.query(
           `UPDATE player_profiles 
            SET games_played = games_played + 1,
-               wins = wins + ${playerXResult === "win" ? 1 : 0},
-               losses = losses + ${playerXResult === "loss" ? 1 : 0},
-               draws = draws + ${playerXResult === "draw" ? 1 : 0},
+               wins = wins + ${playerXResult === 'win' ? 1 : 0},
+               losses = losses + ${playerXResult === 'loss' ? 1 : 0},
+               draws = draws + ${playerXResult === 'draw' ? 1 : 0},
                last_seen = NOW()
            WHERE id = $1`,
           [xPlayerId]
@@ -759,12 +781,13 @@ io.on("connection", (socket) => {
       }
 
       if (oPlayerId) {
+        // Update player O stats
         await pool.query(
           `UPDATE player_profiles 
            SET games_played = games_played + 1,
-               wins = wins + ${playerOResult === "win" ? 1 : 0},
-               losses = losses + ${playerOResult === "loss" ? 1 : 0},
-               draws = draws + ${playerOResult === "draw" ? 1 : 0},
+               wins = wins + ${playerOResult === 'win' ? 1 : 0},
+               losses = losses + ${playerOResult === 'loss' ? 1 : 0},
+               draws = draws + ${playerOResult === 'draw' ? 1 : 0},
                last_seen = NOW()
            WHERE id = $1`,
           [oPlayerId]
@@ -778,6 +801,15 @@ io.on("connection", (socket) => {
           [oPlayerId, xPlayerId, playerOResult, `${scores.X}-${scores.O}`, data.algorithm]
         );
       }
+
+      // Log success
+      console.log('Game history stored successfully', {
+        xPlayerId,
+        oPlayerId,
+        winner,
+        scores
+      });
+
     } catch (error) {
       console.error("Error updating game statistics:", error);
     }
@@ -883,6 +915,105 @@ function getLeagueTier(skillLevel) {
   return "BRONZE"; // Default tier
 }
 
+// Store game state in database
+async function storeGameState(boardState, nextMove, result, playerId, roomId, algorithm, scores, room) {
+  try {
+    // Convert board state to string format without commas
+    const boardStateStr = boardState.map(cell => cell || ' ').join('');
+
+    // Ensure required fields are provided
+    if (!playerId || !roomId || !scores || !room) {
+      console.error("Cannot store game state: playerId, roomId, scores, and room are required");
+      return;
+    }
+
+    const playerIdStr = String(playerId);
+
+    // Get both player IDs
+    const xPlayerResult = await pool.query(
+      `SELECT p.id 
+       FROM player_profiles p
+       JOIN player_sockets s ON p.id = s.player_id
+       WHERE s.socket_id = $1`,
+      [room.playerX]
+    );
+    const oPlayerResult = await pool.query(
+      `SELECT p.id 
+       FROM player_profiles p
+       JOIN player_sockets s ON p.id = s.player_id
+       WHERE s.socket_id = $1`,
+      [room.playerO]
+    );
+
+    const xPlayerId = xPlayerResult.rows[0]?.id;
+    const oPlayerId = oPlayerResult.rows[0]?.id;
+
+    // Determine results for each player
+    const winner = checkWinner(boardState);
+    const playerXResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
+    const playerOResult = winner === 'O' ? 'win' : winner === 'X' ? 'loss' : 'draw';
+    const finalScore = `${scores.X}-${scores.O}`;
+
+    // Store game state
+    await pool.query(
+      `INSERT INTO game_states 
+       (room_id, board_state, next_move, result, player_x_id, player_o_id, 
+        player_x_result, player_o_result, final_score, algorithm)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        roomId, 
+        boardStateStr, 
+        nextMove?.prediction ?? nextMove, 
+        result, 
+        xPlayerId, 
+        oPlayerId,
+        playerXResult,
+        playerOResult,
+        finalScore,
+        algorithm
+      ]
+    );
+
+    // Update player statistics
+    if (xPlayerId) {
+      await pool.query(
+        `UPDATE player_profiles 
+         SET games_played = games_played + 1,
+             wins = wins + ${playerXResult === 'win' ? 1 : 0},
+             losses = losses + ${playerXResult === 'loss' ? 1 : 0},
+             draws = draws + ${playerXResult === 'draw' ? 1 : 0},
+             last_seen = NOW()
+         WHERE id = $1`,
+        [xPlayerId]
+      );
+    }
+
+    if (oPlayerId) {
+      await pool.query(
+        `UPDATE player_profiles 
+         SET games_played = games_played + 1,
+             wins = wins + ${playerOResult === 'win' ? 1 : 0},
+             losses = losses + ${playerOResult === 'loss' ? 1 : 0},
+             draws = draws + ${playerOResult === 'draw' ? 1 : 0},
+             last_seen = NOW()
+         WHERE id = $1`,
+        [oPlayerId]
+      );
+    }
+
+    console.log("Game state stored successfully", {
+      xPlayerId,
+      oPlayerId,
+      playerXResult,
+      playerOResult,
+      finalScore
+    });
+  } catch (error) {
+    console.error("Error storing game state:", error);
+    throw error;
+  }
+}
+
 // Enhanced prediction function
 async function predictNextMove(board, playerId) {
   try {
@@ -898,17 +1029,22 @@ async function predictNextMove(board, playerId) {
     const skillLevel = playerResult.rows[0]?.skill_level || 1000;
     const leagueTier = getLeagueTier(skillLevel);
 
-    // Convert board state to string format
-    const boardStateStr = board.join(",");
+    // Convert board state to string format without commas
+    const boardStateStr = board.map(cell => cell || ' ').join('');
 
     // Find similar game states from players in the same league
     const similarStates = await pool.query(
       `SELECT board_state, next_move, result 
-             FROM game_states 
-             WHERE skill_level BETWEEN $1 AND $2
-             ORDER BY created_at DESC
-             LIMIT 5`,
-      [skillLevel - 200, skillLevel + 200]
+       FROM game_states 
+       WHERE (player_x_id = $1 OR player_o_id = $1)
+       AND (player_x_id IN (
+         SELECT id FROM player_profiles WHERE skill_level BETWEEN $2 AND $3
+       ) OR player_o_id IN (
+         SELECT id FROM player_profiles WHERE skill_level BETWEEN $2 AND $3
+       ))
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [playerIdStr, skillLevel - 200, skillLevel + 200]
     );
 
     if (similarStates.rows.length > 0) {
@@ -989,48 +1125,6 @@ async function getAlgorithmPrediction(board, algorithm) {
   }
 }
 
-// Store game state in database
-async function storeGameState(boardState, nextMove, result, playerId, skillLevel, algorithm) {
-  try {
-    // Convert board state to string format
-    const boardStateStr = boardState.join(",");
-
-    // Ensure playerId is a string and not null
-    if (!playerId) {
-      console.error("Cannot store game state: playerId is required");
-      return;
-    }
-
-    const playerIdStr = String(playerId);
-
-    // Verify player exists in database
-    const playerCheck = await pool.query(
-      "SELECT id FROM player_profiles WHERE id = $1",
-      [playerIdStr]
-    );
-
-    if (playerCheck.rows.length === 0) {
-      console.error("Cannot store game state: player not found in database");
-      return;
-    }
-
-    // Extract prediction value if nextMove is an object
-    const nextMoveValue = nextMove?.prediction ?? nextMove;
-
-    // Store game state
-    await pool.query(
-      `INSERT INTO game_states 
-      (board_state, next_move, result, player_id, skill_level, algorithm)
-      VALUES ($1, $2, $3, $4, $5, $6)`,
-      [boardStateStr, nextMoveValue, result, playerIdStr, skillLevel, algorithm]
-    );
-    console.log("Game state stored successfully");
-  } catch (error) {
-    console.error("Error storing game state:", error);
-    throw error;
-  }
-}
-
 function createGameRoom(roomId) {
   return {
     id: roomId,
@@ -1073,9 +1167,9 @@ app.post("/api/auth/signup", async (req, res) => {
     // Create new user
     const result = await pool.query(
       `INSERT INTO player_profiles 
-            (id, username, password, display_name, age, parent_email, skill_level, games_played, wins, losses, draws) 
-            VALUES ($1, $2, $3, $4, $5, $6, 1000, 0, 0, 0, 0) 
-            RETURNING id, username, display_name`,
+       (id, username, password, display_name, age, parent_email, games_played, wins, losses, draws) 
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 0, 0) 
+       RETURNING id, username, display_name`,
       [userId, username, hashedPassword, display_name, age, parent_email]
     );
 
@@ -1206,18 +1300,29 @@ app.get("/api/profile", async (req, res) => {
       return res.status(404).json({ error: "Player not found" });
     }
 
-    // Get game history
+    // Get game history as both X and O player
     const historyResult = await pool.query(
       `SELECT 
-        gh.created_at,
-        gh.result,
-        gh.score,
-        gh.algorithm,
-        pp.display_name as opponent_name
-       FROM game_history gh
-       LEFT JOIN player_profiles pp ON gh.opponent_id = pp.id
-       WHERE gh.player_id = $1
-       ORDER BY gh.created_at DESC
+        gs.created_at,
+        CASE 
+          WHEN gs.player_x_id = $1 THEN 'X'
+          WHEN gs.player_o_id = $1 THEN 'O'
+        END as player_role,
+        CASE 
+          WHEN gs.player_x_id = $1 THEN gs.player_x_result
+          WHEN gs.player_o_id = $1 THEN gs.player_o_result
+        END as result,
+        gs.final_score as score,
+        gs.algorithm,
+        CASE 
+          WHEN gs.player_x_id = $1 THEN pp_o.display_name
+          WHEN gs.player_o_id = $1 THEN pp_x.display_name
+        END as opponent_name
+       FROM game_states gs
+       LEFT JOIN player_profiles pp_x ON gs.player_x_id = pp_x.id
+       LEFT JOIN player_profiles pp_o ON gs.player_o_id = pp_o.id
+       WHERE gs.player_x_id = $1 OR gs.player_o_id = $1
+       ORDER BY gs.created_at DESC
        LIMIT 50`,
       [userId]
     );
