@@ -113,8 +113,8 @@ function updatePrediction(prediction) {
     const source = prediction.source === 'database' ? 'Historical Data' :
                    prediction.source === 'BFS' ? 'Breadth-First Search' :
                    prediction.source === 'DFS' ? 'Depth-First Search' :
-                   prediction.source === 'N-Queens' ? 'N-Queens Algorithm' :
-                   'Min-Max Algorithm';
+                   prediction.source === 'N-Queens' ? 'N-Queens' :
+                   'Min-Max';
     
     predictionInfoElement.innerHTML = `
       <div class="prediction-info">
