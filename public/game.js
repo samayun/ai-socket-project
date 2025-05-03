@@ -341,7 +341,9 @@ socket.on('gameOver', (data) => {
   } else {
     updateStatus("It's a draw!");
   }
+  
 
+  showGameOverAlert(data.winner, data.scores);
 });
 
 socket.on('boardReset', (data) => {
@@ -384,14 +386,19 @@ socket.on('invalidMove', (data) => {
 
 socket.on('error', (data) => {
   alert(data.message);
+  if (data.message.includes('Room is full')) {
+    const newRoomId = joinRoom();
+    const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
+    alert(`Room was full. Created new room. Share this link with your opponent: ${shareLink}`);
+  }
 });
 
-// Helper function to check if game is over
+
 function isGameOver(board) {
   return checkWinner(board) || board.every(cell => cell !== null);
 }
 
-// Helper function to check for winner
+
 function checkWinner(board) {
   const winPatterns = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows

@@ -528,6 +528,14 @@ io.on('connection', (socket) => {
     }
     
     const room = gameRooms.get(roomId);
+    
+    // Check if room is full (max 2 players)
+    if (room.players.size >= 2) {
+      socket.emit('error', { message: 'Room is full. Maximum 2 players allowed.' });
+      socket.leave(roomId);
+      return;
+    }
+    
     room.players.add(socket.id);
     
     // Notify room of new player
