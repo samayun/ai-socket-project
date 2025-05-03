@@ -988,8 +988,9 @@ function createGameRoom(roomId) {
 }
 
 const PORT = process.env.PORT || 3000;
-initializeDatabase().then(() => {
-  server.listen(PORT, () => {
-    console.log(`Server running : http://localhost:${PORT}`);
-  });
-}); 
+
+server.listen(PORT, () => {
+  console.log(`Server running : http://localhost:${PORT}`);
+});
+
+// initializeDatabase();
