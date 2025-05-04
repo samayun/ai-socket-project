@@ -3,6 +3,8 @@ DROP TABLE IF EXISTS game_history CASCADE;
 DROP TABLE IF EXISTS game_states CASCADE;
 DROP TABLE IF EXISTS player_sockets CASCADE;
 DROP TABLE IF EXISTS player_profiles CASCADE;
+DROP TABLE IF EXISTS room_invitations CASCADE;
+DROP TABLE IF EXISTS rooms CASCADE;
 
 -- Create player profiles table
 CREATE TABLE IF NOT EXISTS player_profiles (
@@ -29,6 +31,8 @@ CREATE TABLE IF NOT EXISTS player_sockets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create game states table
 CREATE TABLE IF NOT EXISTS game_states (
     id SERIAL PRIMARY KEY,
     room_id VARCHAR(50),
@@ -56,6 +60,34 @@ CREATE TABLE IF NOT EXISTS game_history (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create rooms table
+CREATE TABLE rooms (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_by VARCHAR(50) REFERENCES player_profiles(id),
+    status VARCHAR(20) DEFAULT 'waiting',
+    player_count INTEGER DEFAULT 0,
+    max_players INTEGER DEFAULT 2,
+    is_private BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create room_invitations table
+CREATE TABLE room_invitations (
+    id SERIAL PRIMARY KEY,
+    room_id VARCHAR(50) REFERENCES rooms(id),
+    created_by VARCHAR(50) REFERENCES player_profiles(id),
+    invited_username VARCHAR(50),
+    invited_email VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending',
+    accepted_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (room_id, invited_username) WHERE invited_username IS NOT NULL,
+    UNIQUE (room_id, invited_email) WHERE invited_email IS NOT NULL
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_player_sockets_player_id ON player_sockets(player_id);
 CREATE INDEX IF NOT EXISTS idx_game_history_player_id ON game_history(player_id);
@@ -63,3 +95,8 @@ CREATE INDEX IF NOT EXISTS idx_game_history_created_at ON game_history(created_a
 CREATE INDEX IF NOT EXISTS idx_game_states_player_id ON game_states(player_id);
 CREATE INDEX IF NOT EXISTS idx_game_states_player_x_id ON game_states(player_x_id);
 CREATE INDEX IF NOT EXISTS idx_game_states_player_o_id ON game_states(player_o_id);
+CREATE INDEX idx_rooms_status ON rooms(status);
+CREATE INDEX idx_rooms_created_by ON rooms(created_by);
+CREATE INDEX idx_room_invitations_room_id ON room_invitations(room_id);
+CREATE INDEX idx_room_invitations_status ON room_invitations(status);
+CREATE INDEX idx_room_invitations_invited ON room_invitations(invited_username, invited_email);

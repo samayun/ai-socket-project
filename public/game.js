@@ -48,19 +48,19 @@ function joinRoom(roomId = null) {
   return roomToJoin;
 }
 
-// Initialize room from URL or create new one
+
 const urlParams = new URLSearchParams(window.location.search);
 const roomId = urlParams.get('room');
 if (roomId) {
   joinRoom(roomId);
-} else {
-  const newRoomId = joinRoom();
-  // Share room link
-  const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
-  alert(`Share this link with your opponent: ${shareLink}`);
-}
+} 
+// else {
+//   const newRoomId = joinRoom();
+//   const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
+//   alert(`Share this link with your opponent: ${shareLink}`);
+// }
 
-// Update board display
+
 function updateBoard() {
   const cells = boardElement.querySelectorAll('.cell');
   cells.forEach((cell, index) => {
@@ -69,7 +69,6 @@ function updateBoard() {
   });
 }
 
-// Update status display
 function updateStatus() {
   if (!statusElement) return;
   
@@ -84,7 +83,7 @@ function updateStatus() {
   }
 }
 
-// Update score display
+
 function updateScore(scores, playerXName, playerOName) {
   const scoreElement = document.getElementById("score");
   if (scoreElement) {
@@ -102,7 +101,7 @@ function updateScore(scores, playerXName, playerOName) {
   }
 }
 
-// Update move history
+
 function updateMoveHistory() {
   movesListElement.innerHTML = gameState.moveHistory
     .map(move => `
