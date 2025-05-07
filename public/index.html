@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tic Tac Toe with AI</title>
+    <title>Tic Tac Toe</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -24,7 +24,6 @@
         <div class="navbar-menu">
             <div class="navbar-start">
                 <a href="/" class="navbar-item">Home</a>
-                <a href="/rooms.html" class="navbar-item">Rooms</a>
             </div>
 
             <div class="navbar-end">
@@ -36,14 +35,36 @@
 
                 <!-- Authenticated User Buttons -->
                 <div class="auth-buttons" style="display: none;">
+                    <button id="createRoomBtn" class="button is-primary">
+                        <span class="icon">
+                            <i class="fas fa-plus"></i>
+                        </span>
+                        <span>Create Room</span>
+                    </button>
+                    <button id="joinRoomBtn" class="button is-info">
+                        <span class="icon">
+                            <i class="fas fa-door-open"></i>
+                        </span>
+                        <span>Join Room</span>
+                    </button>
                     <div class="navbar-item has-dropdown">
                         <a class="navbar-link">
                             <span class="user-info"></span>
                         </a>
                         <div class="navbar-dropdown">
-                            <a href="/profile.html" class="navbar-item" id="profile-button">My Profile</a>
+                            <a href="/profile.html" class="navbar-item" id="profile-button">
+                                <span class="icon">
+                                    <i class="fas fa-user"></i>
+                                </span>
+                                <span>My Profile</span>
+                            </a>
                             <hr class="navbar-divider">
-                            <a class="navbar-item" id="logout-button">Logout</a>
+                            <a class="navbar-item" id="logout-button">
+                                <span class="icon">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                </span>
+                                <span>Logout</span>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -125,6 +146,31 @@
             <footer class="modal-card-foot">
                 <button class="button is-primary" id="signin-button">Sign In</button>
                 <button class="button" id="signin-cancel">Cancel</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Create Room Modal -->
+    <div class="modal" id="create-room-modal">
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Create New Room</p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="create-room-form">
+                    <div class="field">
+                        <label class="label">Room Code</label>
+                        <div class="control">
+                            <input class="input" type="text" id="room-name" placeholder="Enter room code">
+                        </div>
+                        <p class="help">A cool name will be generated (e.g., ZEUS123, MARIOXYZ, NINJAPRO)</p>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-primary" id="create-room-button">Create Room</button>
+                <button class="button" id="create-room-cancel">Cancel</button>
             </footer>
         </div>
     </div>

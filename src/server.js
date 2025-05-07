@@ -312,7 +312,7 @@ function getOpponentPlayer(board) {
 io.on("connection", (socket) => {
   const session = socket.request.session;
   const userId = session?.userId;
-  
+
   if (!userId) {
     console.log("No authenticated user found");
     socket.disconnect();
@@ -320,11 +320,11 @@ io.on("connection", (socket) => {
   }
 
   console.log("User connected:", userId);
-  
+
   socket.on("playerData", async (data) => {
     try {
       const session = socket.request.session;
-      
+
       if (!session?.userId) {
         socket.emit("error", { message: "Please sign in to play" });
         return;
@@ -388,12 +388,12 @@ io.on("connection", (socket) => {
 
     // Check if room is full (max 2 players)
     if (room.players.size >= 2) {
-      socket.emit("error", {
+        socket.emit("error", {
         message: "Room is full. Maximum 2 players allowed.",
-      });
+        });
       socket.leave(roomId);
-      return;
-    }
+        return;
+      }
 
     room.players.add(socket.id);
 
@@ -460,8 +460,8 @@ io.on("connection", (socket) => {
     const session = socket.request.session;
     if (!session?.userId) {
       socket.emit("error", { message: "Please sign in to play" });
-      return;
-    }
+        return;
+      }
 
     const { roomId, position } = data;
     const room = gameRooms.get(roomId);
@@ -608,7 +608,7 @@ io.on("connection", (socket) => {
       room.board = Array(9).fill(null);
       room.currentPlayer = "X";
       room.moveHistory = [];
-      io.to(roomId).emit("gameStarted", {
+        io.to(roomId).emit("gameStarted", {
         board: room.board,
         currentPlayer: room.currentPlayer,
         scores: room.scores,
@@ -651,13 +651,13 @@ io.on("connection", (socket) => {
 
           if (room.players.size === 0) {
             gameRooms.delete(roomId);
-          } else {
-            io.to(roomId).emit("playerLeft", {
-              playerId: socket.id,
+        } else {
+          io.to(roomId).emit("playerLeft", {
+            playerId: socket.id,
               playerCount: room.players.size,
-            });
-          }
+          });
         }
+      }
       }
     } catch (error) {
       console.error("Error handling disconnect:", error);
@@ -766,6 +766,139 @@ io.on("connection", (socket) => {
       playerXName,
       playerOName
     });
+  });
+
+  // Room Management
+  const rooms = new Map();
+
+  socket.on('createRoom', async ({ roomName, roomCode }) => {
+    try {
+      console.log('Creating room:', { roomName, roomCode, userId });
+      
+      // Check authentication
+      if (!session?.userId) {
+        socket.emit('error', { message: 'Please sign in to create a room' });
+        return;
+      }
+
+      // Check if room code already exists
+      if (gameRooms.has(roomCode)) {
+        socket.emit('error', { message: 'Room code already exists. Please try again.' });
+        return;
+      }
+
+      // Create new room
+      const room = {
+        id: roomCode,
+        name: roomName || 'Game Room',
+        type: 'public',
+        board: Array(9).fill(null),
+        currentPlayer: 'X',
+        players: new Set(),
+        playerX: null,
+        playerO: null,
+        scores: { X: 0, O: 0 },
+        moveHistory: [],
+        createdAt: new Date()
+      };
+
+      // Store room in gameRooms Map
+      gameRooms.set(roomCode, room);
+      
+      // Join the room
+      socket.join(roomCode);
+      
+      // Add player to room
+      room.players.add(socket.id);
+      room.playerX = socket.id;
+
+      // Get player display name
+      let playerName = "Player X";
+      try {
+        const result = await pool.query(
+          `SELECT p.display_name 
+           FROM player_profiles p
+           WHERE p.id = $1`,
+          [session.userId]
+        );
+        if (result.rows.length > 0) {
+          playerName = result.rows[0].display_name;
+        }
+      } catch (error) {
+        console.error("Error fetching player name:", error);
+      }
+
+      // Notify the creator
+      socket.emit('roomCreated', {
+        roomCode,
+        roomName: room.name,
+        playerName
+      });
+
+      // Broadcast room creation to all clients
+      io.emit('roomListUpdated', Array.from(gameRooms.values()));
+
+      console.log('Room created successfully:', {
+        roomCode,
+        roomName: room.name,
+        playerId: session.userId
+      });
+
+    } catch (error) {
+      console.error('Error creating room:', error);
+      socket.emit('error', { message: 'Error creating room' });
+    }
+  });
+
+  socket.on('joinRoom', (roomCode) => {
+    const room = rooms.get(roomCode);
+    
+    if (!room) {
+      socket.emit('error', 'Room not found');
+      return;
+    }
+
+    if (room.players.length >= 2) {
+      socket.emit('error', 'Room is full');
+      return;
+    }
+
+    // Join the room
+    socket.join(roomCode);
+    
+    // Add player to room
+    const player = {
+      id: socket.id,
+      name: socket.user?.name || 'Anonymous',
+      symbol: 'O'
+    };
+    room.players.push(player);
+
+    // Notify all players in the room
+    io.to(roomCode).emit('playerJoined', {
+      player,
+      room: {
+        id: room.id,
+        name: room.name,
+        type: room.type,
+        players: room.players
+      }
+    });
+
+    // If room is full, start the game
+    if (room.players.length === 2) {
+      room.gameState = {
+        board: Array(9).fill(null),
+        currentPlayer: 'X',
+        winner: null,
+        isDraw: false
+      };
+      
+      io.to(roomCode).emit('gameStarted', {
+        gameState: room.gameState,
+        players: room.players
+      });
+    }
   });
 });
 
@@ -1124,8 +1257,8 @@ app.post("/api/auth/signup", async (req, res) => {
     req.session.userId = result.rows[0].id;
     req.session.username = result.rows[0].username;
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       user: {
         id: result.rows[0].id,
         username: result.rows[0].username,
@@ -1230,7 +1363,7 @@ app.post("/api/auth/logout", (req, res) => {
 app.get("/api/profile", async (req, res) => {
   try {
     const userId = req.session.userId;
-    
+
     if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
@@ -1287,7 +1420,7 @@ app.get("/api/profile", async (req, res) => {
 app.get("/api/profile/history", async (req, res) => {
   try {
     const userId = req.session.userId;
-    
+
     if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }

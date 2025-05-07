@@ -54,11 +54,11 @@ const roomId = urlParams.get('room');
 if (roomId) {
   joinRoom(roomId);
 } 
-else {
-  const newRoomId = joinRoom();
-  const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
-  console.log(`Share this link with your opponent: ${shareLink}`);
-}
+// else {
+//   const newRoomId = joinRoom();
+//   const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
+//   console.log(`Share this link with your opponent: ${shareLink}`);
+// }
 
 
 function updateBoard() {
@@ -418,7 +418,7 @@ socket.on('playerLeft', (data) => {
 });
 
 socket.on('invalidMove', (data) => {
-  alert(data.message);
+  data.message && alert(data.message);
 });
 
 socket.on('error', (data) => {
@@ -426,7 +426,7 @@ socket.on('error', (data) => {
     // Redirect to login page or show login modal
     window.location.href = "/login.html";
   } else {
-    alert(data.message);
+    data.message && alert(data.message);
   }
 });
 
@@ -509,4 +509,157 @@ socket.on("moveMade", (data) => {
 socket.on("gameOver", (data) => {
   const { winner, scores, playerXName, playerOName } = data;
   showGameOverAlert(winner, scores, playerXName, playerOName);
+});
+
+// Join room with code
+function joinRoomWithCode() {
+  const roomCode = prompt('Enter room code:');
+  if (roomCode) {
+    joinRoom(roomCode.toUpperCase());
+  }
+}
+
+// Add event listener for join room button
+document.addEventListener('DOMContentLoaded', () => {
+  const joinRoomBtn = document.getElementById('joinRoomBtn');
+  if (joinRoomBtn) {
+    joinRoomBtn.addEventListener('click', joinRoomWithCode);
+  }
+});
+
+// Create Room Modal Functionality
+const createRoomBtn = document.getElementById('createRoomBtn');
+const createRoomModal = document.getElementById('create-room-modal');
+const createRoomForm = document.getElementById('create-room-form');
+const roomNameInput = document.getElementById('room-name');
+const createRoomButton = document.getElementById('create-room-button');
+const createRoomCancel = document.getElementById('create-room-cancel');
+const modalCloseButtons = document.querySelectorAll('.modal .delete');
+
+function showCreateRoomModal() {
+    createRoomModal.classList.add('is-active');
+    // Set default room name to generated code
+    roomNameInput.value = generateRoomCode();
+    roomNameInput.focus();
+}
+
+function hideCreateRoomModal() {
+    createRoomModal.classList.remove('is-active');
+    createRoomForm.reset();
+}
+
+function generateRoomCode() {
+    const prefixes = [
+        // Greek Mythology
+        'ZEUS', 'ATHENA', 'APOLLO', 'HERMES', 'POSEIDON', 'ARES', 'HERA', 'ARTEMIS',
+        // Muslim/Islamic Names
+        'ALI', 'OMAR', 'FATIMA', 'AYESHA', 'KHALID', 'HAMZA', 'ZAINAB', 'IBRAHIM',
+        // Gaming Icons
+        'MARIO', 'LINK', 'SONIC', 'KIRBY', 'PACMAN', 'TETRIS', 'POKEMON', 'ZELDA',
+        // Funny/Cool Names
+        'NINJA', 'DRAGON', 'PHOENIX', 'TITAN', 'WIZARD', 'KNIGHT', 'SAGE', 'HERO',
+        // Classic Names
+        'ALPHA', 'OMEGA', 'NOVA', 'COSMOS', 'STAR', 'MOON', 'SUN', 'SKY'
+    ];
+    
+    const suffixes = [
+        // Numbers
+        '123', '456', '789', '007', '999', '111', '222', '333',
+        // Letters
+        'XYZ', 'ABC', 'DEF', 'GHI', 'JKL', 'MNO', 'PQR', 'STU',
+        // Special
+        'PRO', 'MAX', 'ULTRA', 'MEGA', 'SUPER', 'ELITE', 'MASTER', 'LEGEND'
+    ];
+
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+    
+    return `${prefix}${suffix}`;
+}
+
+function handleCreateRoom(event) {
+    event.preventDefault();
+    const roomName = roomNameInput.value.trim() || generateRoomCode();
+    const roomCode = roomName; // Use the room name as the room code
+    
+    console.log('Creating room:', { roomName, roomCode });
+    
+    socket.emit('createRoom', {
+        roomName,
+        roomCode
+    }, (error) => {
+        if (error) {
+            console.error('Error creating room:', error);
+            error.message && alert(error.message || 'Failed to create room');
+        }
+    });
+
+    hideCreateRoomModal();
+}
+
+// Event Listeners
+createRoomBtn.addEventListener('click', showCreateRoomModal);
+createRoomForm.addEventListener('submit', handleCreateRoom);
+createRoomButton.addEventListener('click', handleCreateRoom);
+createRoomCancel.addEventListener('click', hideCreateRoomModal);
+
+// Close modal when clicking outside
+createRoomModal.addEventListener('click', (event) => {
+    if (event.target === createRoomModal) {
+        hideCreateRoomModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && createRoomModal.classList.contains('is-active')) {
+        hideCreateRoomModal();
+    }
+});
+
+// Close modal with delete button
+modalCloseButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        const modal = button.closest('.modal');
+        if (modal) {
+            modal.classList.remove('is-active');
+        }
+    });
+});
+
+// Socket event handlers for room creation
+socket.on('roomCreated', (data) => {
+    console.log('Room created response:', data);
+    const { roomCode } = data;
+    
+    if (!roomCode) {
+        console.error('No room code received');
+        alert('Error: No room code received');
+        return;
+    }
+    
+    // Show success message with room code
+    alert(`Room created successfully!\nRoom Code: ${roomCode}`);
+    
+    // Redirect to the room
+    window.location.href = '/?room=' + roomCode;
+});
+
+socket.on('error', (data) => {
+    console.error('Socket error:', data);
+    data.message && alert(data.message || 'An error occurred');
+});
+
+// Add connection status handlers
+socket.on('connect', () => {
+    console.log('Socket connected');
+});
+
+socket.on('disconnect', () => {
+    console.log('Socket disconnected');
+});
+
+socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    alert('Failed to connect to server');
 }); 
