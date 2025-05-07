@@ -6,6 +6,8 @@ const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const pgSession = require('connect-pg-simple')(session);
 const crypto = require("crypto");
+const dotenv = require('dotenv');
+dotenv.config();
 
 const pool = new Pool({
   user: process.env.DB_USER || "postgres",
