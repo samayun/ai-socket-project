@@ -650,132 +650,109 @@ h3 {
 /* Game Over Alert */
 .game-over-alert {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.9);
-  background: var(--modal-background);
-  padding: 2rem;
-  border-radius: var(--modal-radius);
-  box-shadow: var(--modal-shadow-content);
-  text-align: center;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1000;
   opacity: 0;
   visibility: hidden;
-  transition: var(--modal-transition);
-  border: 2px solid var(--modal-border);
-  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
 }
 
 .game-over-alert.show {
   opacity: 1;
   visibility: visible;
-  transform: translate(-50%, -50%) scale(1);
-  animation: var(--modal-animation);
 }
 
-.game-over-alert h2 {
-  font-size: 2.5rem;
+.game-over-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  max-width: 90%;
+  width: 400px;
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.game-over-alert.show .game-over-content {
+  transform: scale(1);
+}
+
+.game-over-title {
+  font-size: 2rem;
+  font-weight: bold;
   margin-bottom: 1rem;
-  font-weight: 700;
-  background: linear-gradient(45deg, var(--modal-primary), var(--modal-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: titleGlow 2s ease-in-out infinite;
+  color: #333;
 }
 
-@keyframes titleGlow {
-  0%, 100% {
-    text-shadow: 0 0 10px rgba(255, 159, 28, 0.5);
-  }
-  50% {
-    text-shadow: 0 0 20px rgba(255, 159, 28, 0.8);
-  }
+.game-over-winner {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  color: #4CAF50;
 }
 
-.game-over-alert p {
+.game-over-score {
   font-size: 1.2rem;
   margin-bottom: 2rem;
-  color: var(--modal-text);
-  opacity: 0.9;
+  color: #666;
 }
 
-.game-over-alert .buttons {
+.game-over-buttons {
   display: flex;
   gap: 1rem;
   justify-content: center;
 }
 
-.game-over-alert button {
-  padding: 1rem 2rem;
+.game-over-button {
+  padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 12px;
-  font-size: 1.1rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: var(--modal-transition);
-  position: relative;
-  overflow: hidden;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  transition: all 0.2s ease;
 }
 
-.game-over-alert button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.2),
-    transparent
-  );
-  transition: 0.5s;
-}
-
-.game-over-alert button:hover::before {
-  left: 100%;
-}
-
-.game-over-alert .play-again {
-  background: linear-gradient(45deg, var(--modal-primary), var(--modal-accent));
+.game-over-button:first-child {
+  background: #4CAF50;
   color: white;
-  box-shadow: var(--modal-shadow-button-primary);
 }
 
-.game-over-alert .new-game {
-  background: linear-gradient(45deg, var(--modal-secondary), var(--modal-primary));
-  color: white;
-  box-shadow: var(--modal-shadow-button-secondary);
+.game-over-button.secondary {
+  background: #f0f0f0;
+  color: #333;
 }
 
-.game-over-alert button:hover {
+.game-over-button:hover {
   transform: translateY(-2px);
-  box-shadow: var(--modal-shadow-button-hover);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Confetti Animation */
 .confetti {
-  position: absolute;
+  position: fixed;
   width: 10px;
   height: 10px;
-  background: var(--modal-primary);
-  opacity: 0;
+  background: #f00;
+  pointer-events: none;
   animation: confetti-fall 3s linear forwards;
 }
 
 @keyframes confetti-fall {
   0% {
-    transform: translateY(-100%) rotate(0deg) scale(1);
+    transform: translateY(-100vh) rotate(0deg);
     opacity: 1;
   }
-  50% {
-    transform: translateY(50vh) rotate(180deg) scale(1.2);
-  }
   100% {
-    transform: translateY(100vh) rotate(360deg) scale(1);
+    transform: translateY(100vh) rotate(360deg);
     opacity: 0;
   }
 }

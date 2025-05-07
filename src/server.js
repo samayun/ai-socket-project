@@ -72,62 +72,6 @@ function findRandomEmptyCell(board) {
   return emptyCells[Math.floor(Math.random() * emptyCells.length)];
 }
 
-async function initializeDatabase() {
-  try {
-    // Drop all existing tables
-    await pool.query(`
-            DROP TABLE IF EXISTS game_states CASCADE;
-            DROP TABLE IF EXISTS player_profiles CASCADE;
-        `);
-
-    // Create player_profiles table
-    await pool.query(`
-            CREATE TABLE IF NOT EXISTS player_profiles (
-                id VARCHAR(50) PRIMARY KEY,
-                username VARCHAR(50) UNIQUE,
-                display_name VARCHAR(50),
-                password VARCHAR(255),
-                age INTEGER,
-                parent_email VARCHAR(255),
-                ip_address VARCHAR(50),
-                skill_level INTEGER DEFAULT 1000,
-                games_played INTEGER DEFAULT 0,
-                wins INTEGER DEFAULT 0,
-                losses INTEGER DEFAULT 0,
-                draws INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-    // Create game_states table
-    await pool.query(`
-            CREATE TABLE game_states (
-                id SERIAL PRIMARY KEY,
-                board_state VARCHAR(255) NOT NULL,
-                next_move INTEGER,
-                result VARCHAR(10),
-                player_id VARCHAR(50) REFERENCES player_profiles(id),
-                skill_level INTEGER,
-                algorithm VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (player_id) REFERENCES player_profiles(id)
-            )
-        `);
-
-    // Create indexes for better query performance
-    await pool.query(`
-            CREATE INDEX idx_game_states_player_id ON game_states(player_id);
-            CREATE INDEX idx_game_states_skill_level ON game_states(skill_level);
-            CREATE INDEX idx_game_states_created_at ON game_states(created_at);
-        `);
-
-    console.log("Database tables initialized successfully");
-  } catch (error) {
-    console.error("Error initializing database:", error);
-    throw error;
-  }
-}
 
 function bfsPredictNextMove(board) {
   try {
@@ -929,90 +873,91 @@ async function storeGameState(boardState, nextMove, result, playerId, roomId, al
       return;
     }
 
-    const playerIdStr = String(playerId);
-
-    // Get both player IDs
-    const xPlayerResult = await pool.query(
-      `SELECT p.id 
-       FROM player_profiles p
-       JOIN player_sockets s ON p.id = s.player_id
-       WHERE s.socket_id = $1`,
-      [room.playerX]
+    // Get player skill levels
+    const playerXSkillResult = await pool.query(
+      "SELECT skill_level FROM player_profiles WHERE id = $1",
+      [room.player_x_id]
     );
-    const oPlayerResult = await pool.query(
-      `SELECT p.id 
-       FROM player_profiles p
-       JOIN player_sockets s ON p.id = s.player_id
-       WHERE s.socket_id = $1`,
-      [room.playerO]
+    const playerOSkillResult = await pool.query(
+      "SELECT skill_level FROM player_profiles WHERE id = $1",
+      [room.player_o_id]
     );
 
-    const xPlayerId = xPlayerResult.rows[0]?.id;
-    const oPlayerId = oPlayerResult.rows[0]?.id;
+    const playerXSkillLevel = playerXSkillResult.rows[0]?.skill_level || 0;
+    const playerOSkillLevel = playerOSkillResult.rows[0]?.skill_level || 0;
 
     // Determine results for each player
     const winner = checkWinner(boardState);
-    const playerXResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
-    const playerOResult = winner === 'O' ? 'win' : winner === 'X' ? 'loss' : 'draw';
+    const playerXGameResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
+    const playerOGameResult = winner === 'O' ? 'win' : winner === 'X' ? 'loss' : 'draw';
     const finalScore = `${scores.X}-${scores.O}`;
+
+    // Extract the prediction value from nextMove object
+    const nextMoveValue = typeof nextMove === 'object' ? nextMove.prediction : nextMove;
 
     // Store game state
     await pool.query(
       `INSERT INTO game_states 
-       (room_id, board_state, next_move, result, player_x_id, player_o_id, 
-        player_x_result, player_o_result, final_score, algorithm)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       (board_state, next_move, result, player_id, skill_level, algorithm, room_id, 
+        player_x_id, player_o_id, player_x_result, player_o_result, final_score)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
-        roomId, 
-        boardStateStr, 
-        nextMove?.prediction ?? nextMove, 
-        result, 
-        xPlayerId, 
-        oPlayerId,
-        playerXResult,
-        playerOResult,
-        finalScore,
-        algorithm
+        boardStateStr,
+        nextMoveValue,
+        result,
+        playerId,
+        Math.max(playerXSkillLevel, playerOSkillLevel),
+        algorithm,
+        roomId,
+        room.player_x_id,
+        room.player_o_id,
+        playerXGameResult,
+        playerOGameResult,
+        finalScore
       ]
     );
 
     // Update player statistics
-    if (xPlayerId) {
+    if (room.player_x_id) {
       await pool.query(
         `UPDATE player_profiles 
          SET games_played = games_played + 1,
-             wins = wins + ${playerXResult === 'win' ? 1 : 0},
-             losses = losses + ${playerXResult === 'loss' ? 1 : 0},
-             draws = draws + ${playerXResult === 'draw' ? 1 : 0},
+             wins = wins + ${playerXGameResult === 'win' ? 1 : 0},
+             losses = losses + ${playerXGameResult === 'loss' ? 1 : 0},
+             draws = draws + ${playerXGameResult === 'draw' ? 1 : 0},
              last_seen = NOW()
          WHERE id = $1`,
-        [xPlayerId]
+        [room.player_x_id]
       );
     }
 
-    if (oPlayerId) {
+    if (room.player_o_id) {
       await pool.query(
         `UPDATE player_profiles 
          SET games_played = games_played + 1,
-             wins = wins + ${playerOResult === 'win' ? 1 : 0},
-             losses = losses + ${playerOResult === 'loss' ? 1 : 0},
-             draws = draws + ${playerOResult === 'draw' ? 1 : 0},
+             wins = wins + ${playerOGameResult === 'win' ? 1 : 0},
+             losses = losses + ${playerOGameResult === 'loss' ? 1 : 0},
+             draws = draws + ${playerOGameResult === 'draw' ? 1 : 0},
              last_seen = NOW()
          WHERE id = $1`,
-        [oPlayerId]
+        [room.player_o_id]
       );
     }
 
     console.log("Game state stored successfully", {
-      xPlayerId,
-      oPlayerId,
-      playerXResult,
-      playerOResult,
+      boardState: boardStateStr,
+      nextMove: nextMoveValue,
+      result,
+      playerId,
+      roomId,
+      algorithm,
+      scores,
+      playerXGameResult,
+      playerOGameResult,
       finalScore
     });
   } catch (error) {
     console.error("Error storing game state:", error);
-    throw error;
   }
 }
 
@@ -1387,5 +1332,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running : http://localhost:${PORT}`);
 });
-
-// initializeDatabase();

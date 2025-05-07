@@ -54,11 +54,11 @@ const roomId = urlParams.get('room');
 if (roomId) {
   joinRoom(roomId);
 } 
-// else {
-//   const newRoomId = joinRoom();
-//   const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
-//   alert(`Share this link with your opponent: ${shareLink}`);
-// }
+else {
+  const newRoomId = joinRoom();
+  const shareLink = `${window.location.origin}${window.location.pathname}?room=${newRoomId}`;
+  console.log(`Share this link with your opponent: ${shareLink}`);
+}
 
 
 function updateBoard() {
@@ -144,70 +144,48 @@ function updatePrediction(prediction) {
 
 // Show game over alert
 function showGameOverAlert(winner, scores, playerXName, playerOName) {
-  const alertDiv = document.createElement("div");
-  alertDiv.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+  const gameOverAlert = document.getElementById('gameOverAlert');
+  const gameOverWinner = document.getElementById('gameOverWinner');
+  const gameOverScore = document.getElementById('gameOverScore');
   
   // Ensure we have valid names
   const xName = playerXName || "Player X";
   const oName = playerOName || "Player O";
   
-  alertDiv.innerHTML = `
-    <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-      <h2 class="text-2xl font-bold mb-4 text-center">
-        ${winner ? `🎉 ${winner === "X" ? xName : oName} Won!` : "Game Draw!"}
-      </h2>
-      <div class="text-center mb-4">
-        <p class="text-lg">
-          Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}
-        </p>
-      </div>
-      <div class="flex justify-center">
-        <button onclick="startNewGame()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
-          Play Again
-        </button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(alertDiv);
+  // Update the content
+  gameOverWinner.textContent = winner ? `🎉 ${winner === "X" ? xName : oName} Won!` : "Game Draw!";
+  gameOverScore.textContent = `Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}`;
+  
+  // Show the alert
+  gameOverAlert.classList.add('show');
+  
+  // Add confetti effect for winner
+  if (winner) {
+    createConfetti();
+  }
+  
+  // Add event listener for Escape key
+  document.addEventListener('keydown', handleEscapeKey);
 }
 
-// Create confetti with different colors
+// Create confetti effect
 function createConfetti() {
-  const colors = ['var(--primary-color)', 'var(--secondary-color)', '#FFD700', '#FF69B4'];
-  const confettiCount = 50;
+  const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
+  const container = document.body;
   
-  for (let i = 0; i < confettiCount; i++) {
+  for (let i = 0; i < 100; i++) {
     const confetti = document.createElement('div');
     confetti.className = 'confetti';
     confetti.style.left = Math.random() * 100 + 'vw';
-    confetti.style.width = Math.random() * 10 + 5 + 'px';
-    confetti.style.height = Math.random() * 10 + 5 + 'px';
-    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
-    confetti.style.animationDelay = Math.random() * 2 + 's';
-    document.body.appendChild(confetti);
+    confetti.style.animationDelay = Math.random() * 3 + 's';
+    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    container.appendChild(confetti);
     
     // Remove confetti after animation
     setTimeout(() => {
       confetti.remove();
-    }, 5000);
+    }, 3000);
   }
-}
-
-// Find winning cells
-function findWinningCells(board, winner) {
-  const winPatterns = [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-    [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-    [0, 4, 8], [2, 4, 6] // Diagonals
-  ];
-
-  for (const pattern of winPatterns) {
-    const [a, b, c] = pattern;
-    if (board[a] === winner && board[b] === winner && board[c] === winner) {
-      return pattern;
-    }
-  }
-  return [];
 }
 
 // Handle Escape key
@@ -219,13 +197,9 @@ function handleEscapeKey(event) {
 
 // Hide game over alert
 function hideGameOverAlert() {
+  const gameOverAlert = document.getElementById('gameOverAlert');
   gameOverAlert.classList.remove('show');
   document.removeEventListener('keydown', handleEscapeKey);
-  
-  // Remove winning cell highlights
-  document.querySelectorAll('.winning-cell').forEach(cell => {
-    cell.classList.remove('winning-cell');
-  });
 }
 
 // Generate a unique fingerprint for the player
