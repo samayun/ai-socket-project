@@ -1,4 +1,3 @@
-
 const socket = io();
 
 const gameState = {
@@ -14,6 +13,39 @@ const gameState = {
   playerXName: null,
   playerOName: null
 };
+
+
+const sounds = {
+  move: new Audio('/sounds/move.mp3'),
+  win: new Audio('/sounds/win.mp3'),
+  draw: new Audio('/sounds/draw.mp3'),
+  error: new Audio('/sounds/error.mp3'),
+  reset: new Audio('/sounds/reset.mp3'),
+  music: new Audio('/sounds/music.mp3')
+};
+
+// Preload sounds
+Object.values(sounds).forEach(sound => {
+  sound.load();
+  sound.volume = 0.8;
+});
+
+// Set music to loop and lower volume
+sounds.music.loop = true;
+sounds.music.volume = 0.3;
+
+// Function to start music
+function startGameMusic() {
+  sounds.music.play().catch(error => {
+    console.log('Game music autoplay prevented:', error);
+  });
+}
+
+// Function to stop music
+function stopGameMusic() {
+  sounds.music.pause();
+  sounds.music.currentTime = 0;
+}
 
 // DOM Elements
 const boardElement = document.querySelector('.game-board');
@@ -156,7 +188,10 @@ function showGameOverAlert(winner, scores, playerXName, playerOName) {
   gameOverAlert.classList.add('show');
   
   if (winner) {
+    sounds.win.play();
     createConfetti();
+  } else {
+    sounds.draw.play();
   }
   
   document.addEventListener('keydown', handleEscapeKey);
@@ -199,20 +234,24 @@ function hideGameOverAlert() {
 // Handle cell click
 function handleCellClick(position) {
   if (!gameState.roomId) {
+    sounds.error.play();
     alert('Please join a room first');
     return;
   }
   
   if (gameState.board[position] || gameState.gameStatus === 'over') {
+    sounds.error.play();
     return;
   }
   
   // Check if it's the player's turn
   if ((gameState.currentPlayer === 'X' && !gameState.isPlayerX) || 
       (gameState.currentPlayer === 'O' && !gameState.isPlayerO)) {
+    sounds.error.play();
     return;
   }
   
+  sounds.move.play();
   socket.emit('makeMove', {
     roomId: gameState.roomId,
     position,
@@ -220,14 +259,17 @@ function handleCellClick(position) {
   });
 }
 
-// Event Listeners
+
 boardElement.querySelectorAll('.cell').forEach((cell, index) => {
   cell.addEventListener('click', () => handleCellClick(index));
 });
 
 resetButton.addEventListener('click', () => {
   if (gameState.roomId) {
+    sounds.reset.play();
+    // stopGameMusic();
     socket.emit('resetBoard', gameState.roomId);
+    startGameMusic();
   }
 });
 
@@ -241,6 +283,7 @@ playAgainBtn.addEventListener('click', () => {
   hideGameOverAlert();
   if (gameState.roomId) {
     socket.emit('resetBoard', gameState.roomId);
+    startGameMusic(); // Start music when new game begins
   }
 });
 
@@ -276,6 +319,7 @@ socket.on('playerJoined', (data) => {
   if (playerCount === 2) {
     gameState.gameStatus = "playing";
     updateStatus();
+    startGameMusic(); // Start music when game begins
   }
 });
 
@@ -322,6 +366,8 @@ socket.on('gameOver', (data) => {
   // Update UI
   updateScore(scores, gameState.playerXName, gameState.playerOName);
   showGameOverAlert(winner, scores, gameState.playerXName, gameState.playerOName);
+  
+  stopGameMusic(); // Stop music when game ends
 });
 
 socket.on('boardReset', (data) => {
