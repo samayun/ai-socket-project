@@ -818,35 +818,51 @@ io.on("connection", async (socket) => {
         return;
       }
 
-      // Check if room code already exists
+      // Check if room code already exists in gameRooms
       if (gameRooms.has(roomCode)) {
-        socket.emit('error', { message: 'Room code already exists. Please try again.' });
+        socket.emit('error', { message: 'Room code already exists. Please try a different code.' });
+        return;
+      }
+
+      // Check if room exists in database
+      const existingRoom = await pool.query(
+        'SELECT id FROM rooms WHERE id = $1',
+        [roomCode]
+      );
+
+      if (existingRoom.rows.length > 0) {
+        socket.emit('error', { message: 'Room code already exists. Please try a different code.' });
         return;
       }
 
       // Create new room
-      const room = {
-        id: roomCode,
-        name: roomCode || 'Game Room',
-        type: 'public',
-        board: Array(9).fill(null),
-        currentPlayer: 'X',
-        players: new Set(),
-        playerX: null,
-        playerO: null,
-        scores: { X: 0, O: 0 },
-        moveHistory: [],
-        createdAt: new Date()
-      };
+      const room = createGameRoom(roomCode);
+      room.name = roomName || roomCode;
+      room.createdBy = session.playerId;
+      room.createdAt = new Date();
 
+      // Store room in database
+      try {
+        await pool.query(
+          `INSERT INTO rooms (id, name, created_by, status, player_count, max_players)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [roomCode, room.name, session.playerId, 'waiting', 1, 2]
+        );
+      } catch (error) {
+        console.error('Error storing room in database:', error);
+        socket.emit('error', { message: 'Error creating room in database' });
+        return;
+      }
+
+      // Add room to gameRooms
       gameRooms.set(roomCode, room);
       
-
+      // Join the room
       socket.join(roomCode);
-      
       room.players.add(socket.id);
       room.playerX = socket.id;
 
+      // Get player name
       let playerName = "Player X";
       try {
         const result = await pool.query(
@@ -862,13 +878,14 @@ io.on("connection", async (socket) => {
         console.error("Error fetching player name:", error);
       }
 
-
+      // Emit success response
       socket.emit('roomCreated', {
         roomCode,
         roomName: room.name,
         playerName
       });
 
+      // Broadcast room list update
       io.emit('roomListUpdated', Array.from(gameRooms.values()));
 
       console.log('Room created successfully:', {

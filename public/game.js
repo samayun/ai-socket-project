@@ -142,17 +142,7 @@ function updateScore(scores, playerXName, playerOName) {
 }
 
 
-function updateMoveHistory() {
-  movesListElement.innerHTML = gameState.moveHistory
-    .map(move => `
-      <div class="move">
-        Player ${move.player} placed at position ${move.position + 1}
-        <span class="timestamp">${new Date(move.timestamp).toLocaleTimeString()}</span>
-      </div>
-    `)
-    .join('');
-  movesListElement.scrollTop = movesListElement.scrollHeight;
-}
+
 
 // Update prediction display
 function updatePrediction(prediction) {
@@ -201,7 +191,7 @@ function showGameOverAlert(winner, scores, playerXName, playerOName) {
     sounds.draw.play().then().catch();
   }
   
-  gameOverScore.textContent = `Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}`;
+  gameOverScore.textContent = `Final Score: ${xName}: ${scores?.X || 0} | ${oName}: ${scores?.O || 0}`;
   gameOverAlert.classList.add('show');
   
   document.addEventListener('keydown', handleEscapeKey);
@@ -426,7 +416,7 @@ socket.on('boardReset', (data) => {
   updateBoard();
   updateStatus();
   updateScore(gameState.scores, gameState.playerXName, gameState.playerOName);
-  updateMoveHistory();
+  
   updatePrediction(null);
 });
 
@@ -441,7 +431,7 @@ socket.on('gameStarted', (data) => {
   updateBoard();
   updateStatus();
   updateScore(gameState.scores, gameState.playerXName, gameState.playerOName);
-  updateMoveHistory();
+  
   updatePrediction(null);
 });
 
@@ -631,11 +621,14 @@ function handleCreateRoom(event) {
         if (error) {
             console.error('Error creating room:', error);
             showToast(error.message || 'Failed to create room', 'error');
-            // sounds.error.play().then().catch();
+            return;
         }
+        
+        // Only hide modal and redirect after successful room creation
+        hideCreateRoomModal();
+        showToast(`Room created successfully! Room Code: ${roomCode}`, 'success');
+        window.location.href = '/?room=' + roomCode;
     });
-
-    hideCreateRoomModal();
 }
 
 // Event Listeners
@@ -697,12 +690,12 @@ socket.on('error', (data) => {
 // Add connection status handlers
 socket.on('connect', () => {
     console.log('Connected to server with socket ID:', socket.id);
-    showToast('Connected to server', 'success');
+    // showToast('Connected to server', 'success');
 });
 
 socket.on('disconnect', () => {
     console.log('Socket disconnected');
-    showToast('Disconnected from server', 'error');
+    // showToast('Disconnected from server', 'error');
 });
 
 socket.on('connect_error', (error) => {
