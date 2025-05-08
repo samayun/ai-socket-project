@@ -410,56 +410,92 @@ const algorithm = skillLevel > 3000 ? "nQueens" :
 
 ### Room Events
 ```javascript
-// Join room
 socket.emit('joinRoom', roomId);
 
-// Leave room
 socket.emit('leaveRoom', roomId);
 
-// Reset board
 socket.emit('resetBoard', roomId);
+
+socket.emit('createRoom', {
+    roomName,
+    roomCode
+});
+
+
 ```
 
 ### Game Events
 ```javascript
-// Make move
 socket.emit('makeMove', {
-  roomId: string,
-  position: number,
-  player: 'X' | 'O'
+    roomId: gameState.roomId,
+    position,
+    playerId: gameState.playerId
 });
 
 // New game
 socket.emit('newGame', roomId);
 ```
 
+### Miscellenious Events
+```javascript
+socket.emit("error", {  message: "Room is full. Maximum 2 players allowed." });
+
+socket.emit('playerData', { id: authData.user.id });
+```
+
+
 ## Deployment
 
 ### Docker Deployment
 ```yaml
-version: '3'
 services:
-  app:
-    build: .
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres
     ports:
-      - "3000:3000"
+      - "5435:5432"
     environment:
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=db
-      - DB_PORT=5432
-    depends_on:
-      - db
-
-  db:
-    image: postgres:13
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ai_project
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./database-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: ai-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
+      - ./docker/pgadmin/pgpass:/pgpass
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-network
+    user: root
+    entrypoint: /bin/sh -c "chmod 600 /pgpass; /entrypoint.sh;"
+
+networks:
+  ai-network:
+    driver: bridge
 
 volumes:
-  postgres-data:
+  postgres_data:
 ```
 
 ### Environment Variables
