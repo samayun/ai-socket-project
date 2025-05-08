@@ -10,6 +10,7 @@
 7. [WebSocket Events](#websocket-events)
 8. [Deployment](#deployment)
 9. [Troubleshooting](#troubleshooting)
+10. [Prediction System](#prediction-system)
 
 ## Project Overview
 
@@ -608,3 +609,165 @@ For additional support:
 - Check GitHub issues
 - Contact development team
 - Review documentation updates 
+
+## Prediction System
+
+### Overview
+The prediction system uses a multi-layered approach combining historical data analysis, algorithm-based prediction, and fallback mechanisms to provide accurate move suggestions.
+
+### Vector Similarity Search
+
+#### Implementation
+```sql
+-- Vector similarity search query
+SELECT board_state, next_move, result 
+FROM game_states 
+WHERE (player_x_id = $1 OR player_o_id = $1)
+AND (player_x_id IN (
+  SELECT id FROM player_profiles WHERE skill_level BETWEEN $2 AND $3
+) OR player_o_id IN (
+  SELECT id FROM player_profiles WHERE skill_level BETWEEN $2 AND $3
+))
+ORDER BY created_at DESC
+LIMIT 5
+```
+
+#### Process
+1. **Board State Vectorization**
+   - Converts board state to 9-character string
+   - Format: `board.map(cell => cell || ' ').join('')`
+   - Example: "X O X   O  " for a partial board
+
+2. **Skill Level Filtering**
+   - Searches within ±200 skill points of player
+   - Ensures relevant predictions for skill level
+   - Maintains competitive balance
+
+3. **Similarity Calculation**
+   - Uses PostgreSQL vector similarity
+   - Compares current board with historical states
+   - Returns most similar configurations
+
+### Prediction Process
+
+#### Weight Calculation
+```javascript
+const predictions = similarStates.rows.map((row) => ({
+  move: row.next_move,
+  weight: row.result === "win" ? 1.5 : 1.0,
+}));
+```
+
+- Winning moves: 1.5x weight
+- Other moves: 1.0x weight
+- Weights multiplied by similarity score
+
+#### Move Selection
+```javascript
+const bestMove = predictions.reduce((best, current) =>
+  current.weight > best.weight ? current : best
+);
+```
+
+- Aggregates predictions from similar states
+- Selects move with highest weighted score
+- Returns prediction with confidence level
+
+### Algorithm Fallback
+
+#### Selection Criteria
+```javascript
+const algorithm = skillLevel > 3000 ? "nQueens" : 
+                 skillLevel > 2000 ? "bfs" : "dfs";
+```
+
+- Diamond/Platinum (>3000): N-Queens algorithm
+- Gold (>2000): BFS algorithm
+- Silver/Bronze: DFS algorithm
+
+### Confidence Levels
+
+The system provides the following confidence levels:
+- "win": Guaranteed winning move
+- "block": Blocking opponent's winning move
+- "center": Strategic center position
+- "corner": Strategic corner position
+- "strategic": Advanced strategic move
+- "default": Basic move
+
+### Real-time Updates
+
+#### WebSocket Events
+```javascript
+socket.on('prediction', (data) => {
+  if (data && typeof data.prediction === 'number') {
+    updatePrediction(data);
+  } else {
+    updatePrediction(null);
+  }
+});
+```
+
+#### UI Updates
+- Predicted move position
+- Confidence level display
+- Algorithm source
+- Strategic recommendations
+
+### Performance Considerations
+
+1. **Database Optimization**
+   - Indexed queries for vector similarity
+   - Efficient board state storage
+   - Cached predictions for common states
+
+2. **Real-time Processing**
+   - Asynchronous prediction calculation
+   - Non-blocking move validation
+   - Efficient state updates
+
+3. **Memory Management**
+   - Limited historical state storage
+   - Regular cleanup of old predictions
+   - Optimized vector calculations
+
+### Error Handling
+
+```javascript
+try {
+  const prediction = await predictNextMove(board, playerId);
+  return {
+    prediction: prediction.prediction,
+    confidence: prediction.confidence,
+    algorithm: prediction.algorithm,
+    leagueTier: prediction.leagueTier
+  };
+} catch (error) {
+  console.error("Error in prediction:", error);
+  return {
+    prediction: findRandomEmptyCell(board),
+    confidence: 0.5,
+    algorithm: "fallback",
+    leagueTier: "BRONZE"
+  };
+}
+```
+
+### Future Enhancements
+
+1. **Advanced Vector Similarity**
+   - Implement custom similarity metrics
+   - Add pattern recognition
+   - Improve historical data analysis
+
+2. **Machine Learning Integration**
+   - Train models on historical data
+   - Implement reinforcement learning
+   - Add adaptive difficulty
+
+3. **Performance Improvements**
+   - Implement prediction caching
+   - Optimize vector calculations
+   - Add parallel processing
+
+ 
