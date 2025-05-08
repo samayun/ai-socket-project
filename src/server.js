@@ -1301,7 +1301,11 @@ app.get("/api/auth/status", async (req, res) => {
 
     res.json({
       authenticated: true,
-      user: result.rows[0],
+      user: {
+        id: result.rows[0].id,
+        username: result.rows[0].username,
+        display_name: result.rows[0].display_name
+      }
     });
   } catch (error) {
     console.error("Auth status error:", error);

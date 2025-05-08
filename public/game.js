@@ -1,7 +1,6 @@
-// Socket.IO connection
+
 const socket = io();
 
-// Game state
 const gameState = {
   board: Array(9).fill(null),
   currentPlayer: 'X',
@@ -30,7 +29,7 @@ const gameOverScore = document.getElementById('gameOverScore');
 const playAgainBtn = document.getElementById('playAgainBtn');
 // const newGameFromAlertBtn = document.getElementById('newGameFromAlertBtn');
 
-// Room management
+
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
