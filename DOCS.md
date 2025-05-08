@@ -1,4 +1,5 @@
-# AI-Powered Tic-Tac-Toe Game Documentation
+# Tic-Tac-Toe 
+A real time game with AI prediction 
 
 ## Table of Contents
 1. [Project Overview](#project-overview)
