@@ -2,16 +2,17 @@ const socket = io();
 
 const gameState = {
   board: Array(9).fill(null),
-  currentPlayer: 'X',
+  currentPlayer: null,
   gameStatus: 'waiting',
-  playerFingerprint: null,
-  playerName: null,
-  playerStats: null,
+  playerId: null,
+  playerXId: null,
+  playerOId: null,
+  playerXName: null,
+  playerOName: null,
   roomId: null,
   isPlayerX: false,
   isPlayerO: false,
-  playerXName: null,
-  playerOName: null
+  scores: { X: 0, O: 0 }
 };
 
 
@@ -21,7 +22,7 @@ const sounds = {
   draw: new Audio('/sounds/draw.mp3'),
   error: new Audio('/sounds/error.mp3'),
   reset: new Audio('/sounds/reset.mp3'),
-  music: new Audio('/sounds/music.mp3')
+  music: new Audio('/sounds/music.webm')
 };
 
 // Preload sounds
@@ -36,7 +37,7 @@ sounds.music.volume = 0.3;
 
 // Function to start music
 function startGameMusic() {
-  sounds.music.play().catch(error => {
+  sounds.music.play().then().catch().catch(error => {
     console.log('Game music autoplay prevented:', error);
   });
 }
@@ -108,28 +109,36 @@ function updateStatus() {
   } else if (gameState.gameStatus === 'over') {
     statusElement.textContent = 'Game Over';
   } else {
-    const isMyTurn = (gameState.currentPlayer === 'X' && gameState.isPlayerX) || 
-                     (gameState.currentPlayer === 'O' && gameState.isPlayerO);
-    statusElement.textContent = isMyTurn ? 'Your turn!' : 'Opponent\'s turn';
+    const isMyTurn = (gameState.currentPlayer === gameState.playerXId && gameState.isPlayerX) || 
+                     (gameState.currentPlayer === gameState.playerOId && gameState.isPlayerO);
+    const currentPlayerName = gameState.currentPlayer === gameState.playerXId ? gameState.playerXName : gameState.playerOName;
+    const nextPlayerName = gameState.currentPlayer === gameState.playerXId ? gameState.playerOName : gameState.playerXName;
+    
+    statusElement.innerHTML = `
+      <div class="text-lg font-semibold">
+        ${isMyTurn ? 'Your turn!' : `${currentPlayerName}'s turn`}
+      </div>
+      <div class="text-sm text-gray-500">
+        Next: ${nextPlayerName}
+      </div>
+    `;
   }
 }
 
 
 function updateScore(scores, playerXName, playerOName) {
-  const scoreElement = document.getElementById("score");
-  if (scoreElement) {
-    // Ensure we have valid names, fallback to "Player X/O" if undefined
-    const xName = playerXName || "Player X";
-    const oName = playerOName || "Player O";
-    
-    scoreElement.innerHTML = `
-      <div class="text-lg font-semibold">
-        <span class="text-blue-500">${xName}: ${scores.X || 0}</span>
-        <span class="text-gray-400 mx-2">|</span>
-        <span class="text-red-500">${oName}: ${scores.O || 0}</span>
-      </div>
-    `;
-  }
+  if (!scoreElement) return;
+  
+  const xName = playerXName || "Player X";
+  const oName = playerOName || "Player O";
+  
+  scoreElement.innerHTML = `
+    <div class="text-lg font-semibold">
+      <span class="text-blue-500">${xName}: ${scores.X || 0}</span>
+      <span class="text-gray-400 mx-2">|</span>
+      <span class="text-red-500">${oName}: ${scores.O || 0}</span>
+    </div>
+  `;
 }
 
 
@@ -182,17 +191,18 @@ function showGameOverAlert(winner, scores, playerXName, playerOName) {
   const xName = playerXName || "Player X";
   const oName = playerOName || "Player O";
 
-  gameOverWinner.textContent = winner ? `🎉 ${winner === "X" ? xName : oName} Won!` : "Game Draw!";
-  gameOverScore.textContent = `Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}`;
-
-  gameOverAlert.classList.add('show');
-  
   if (winner) {
-    sounds.win.play();
+    const winnerName = winner === "X" ? xName : oName;
+    gameOverWinner.textContent = `🎉 ${winnerName} Won!`;
+    sounds.win.play().then().catch();
     createConfetti();
   } else {
-    sounds.draw.play();
+    gameOverWinner.textContent = "Game Draw!";
+    sounds.draw.play().then().catch();
   }
+  
+  gameOverScore.textContent = `Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}`;
+  gameOverAlert.classList.add('show');
   
   document.addEventListener('keydown', handleEscapeKey);
 }
@@ -234,28 +244,28 @@ function hideGameOverAlert() {
 // Handle cell click
 function handleCellClick(position) {
   if (!gameState.roomId) {
-    sounds.error.play();
+    sounds.error.play().then().catch();
     alert('Please join a room first');
     return;
   }
   
   if (gameState.board[position] || gameState.gameStatus === 'over') {
-    sounds.error.play();
+    sounds.error.play().then().catch();
     return;
   }
   
-  // Check if it's the player's turn
-  if ((gameState.currentPlayer === 'X' && !gameState.isPlayerX) || 
-      (gameState.currentPlayer === 'O' && !gameState.isPlayerO)) {
-    sounds.error.play();
+  // Check if it's the player's turn using IDs
+  if ((gameState.currentPlayer === gameState.playerXId && !gameState.isPlayerX) || 
+      (gameState.currentPlayer === gameState.playerOId && !gameState.isPlayerO)) {
+    sounds.error.play().then().catch();
     return;
   }
   
-  sounds.move.play();
+  sounds.move.play().then().catch();
   socket.emit('makeMove', {
     roomId: gameState.roomId,
     position,
-    playerFingerprint: gameState.playerFingerprint
+    playerId: gameState.playerId
   });
 }
 
@@ -266,7 +276,7 @@ boardElement.querySelectorAll('.cell').forEach((cell, index) => {
 
 resetButton.addEventListener('click', () => {
   if (gameState.roomId) {
-    sounds.reset.play();
+    sounds.reset.play().then().catch();
     // stopGameMusic();
     socket.emit('resetBoard', gameState.roomId);
     startGameMusic();
@@ -298,47 +308,47 @@ playAgainBtn.addEventListener('click', () => {
 socket.on('playerJoined', (data) => {
   const { playerId, playerCount, currentPlayer, board, scores, playerX, playerO, playerXName, playerOName } = data;
   
-  // Update game state
+  // Update game state with IDs and names
   gameState.board = board;
+  gameState.playerId = playerId;
   gameState.currentPlayer = currentPlayer;
   gameState.scores = scores;
-  gameState.isPlayerX = socket.id === playerX;
-  gameState.isPlayerO = socket.id === playerO;
+  gameState.playerXId = playerX;
+  gameState.playerOId = playerO;
   gameState.playerXName = playerXName || "Player X";
   gameState.playerOName = playerOName || "Player O";
+  gameState.isPlayerX = playerId === playerX;
+  gameState.isPlayerO = playerId === playerO;
+  
+  console.log('Game State Updated:', gameState);
   
   // Update UI
   updateBoard();
   updateScore(scores, gameState.playerXName, gameState.playerOName);
-  updateTurnDisplay(
-    currentPlayer,
-    currentPlayer === "X" ? gameState.playerXName : gameState.playerOName,
-    currentPlayer === "X" ? gameState.playerOName : gameState.playerXName
-  );
+  updateStatus();
+  updatePlayerNames();
   
   if (playerCount === 2) {
     gameState.gameStatus = "playing";
     updateStatus();
-    startGameMusic(); // Start music when game begins
+    startGameMusic();
   }
 });
 
 socket.on('moveMade', (data) => {
-  const { position, player, board, playerXName, playerOName } = data;
+  const { position, player, board, playerXName, playerOName, currentPlayer } = data;
   
   // Update game state
   gameState.board = board;
   gameState.playerXName = playerXName || gameState.playerXName || "Player X";
   gameState.playerOName = playerOName || gameState.playerOName || "Player O";
+  gameState.currentPlayer = currentPlayer;
   
   // Update UI
   updateBoard();
   updateScore(gameState.scores, gameState.playerXName, gameState.playerOName);
-  updateTurnDisplay(
-    player === "X" ? "O" : "X",
-    player === "X" ? gameState.playerOName : gameState.playerXName,
-    player === "X" ? gameState.playerXName : gameState.playerOName
-  );
+  updateStatus();
+  updatePlayerNames();
   
   // Check if the game is over after the move
   if (isGameOver(data.board)) {
@@ -644,7 +654,7 @@ socket.on('error', (data) => {
 
 // Add connection status handlers
 socket.on('connect', () => {
-    console.log('Socket connected');
+    console.log('Connected to server with socket ID:', socket.id);
 });
 
 socket.on('disconnect', () => {
@@ -653,5 +663,30 @@ socket.on('disconnect', () => {
 
 socket.on('connect_error', (error) => {
     console.error('Connection error:', error);
+    if (error.message === 'No player ID provided') {
+        // Redirect to login or show error
+        window.location.href = '/login.html';
+    }
     alert('Failed to connect to server');
-}); 
+});
+
+function updatePlayerNames() {
+  const playerNamesElement = document.getElementById('playerNames');
+  if (!playerNamesElement) return;
+
+  const xName = gameState.playerXName || "Player X";
+  const oName = gameState.playerOName || "Player O";
+  
+  playerNamesElement.innerHTML = `
+    <div class="flex justify-between items-center mb-4">
+      <div class="text-blue-500 font-semibold">
+        <span class="text-lg">X: ${xName}</span>
+        ${gameState.isPlayerX ? ' (You)' : ''}
+      </div>
+      <div class="text-red-500 font-semibold">
+        <span class="text-lg">O: ${oName}</span>
+        ${gameState.isPlayerO ? ' (You)' : ''}
+      </div>
+    </div>
+  `;
+} 

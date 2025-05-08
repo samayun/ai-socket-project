@@ -309,7 +309,7 @@ function getOpponentPlayer(board) {
   return getCurrentPlayer(board) === "X" ? "O" : "X";
 }
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   const session = socket.request.session;
   const userId = session?.userId;
 
@@ -318,8 +318,30 @@ io.on("connection", (socket) => {
     socket.disconnect();
     return;
   }
+  try {
+    await pool.query(
+      `INSERT INTO player_sockets (socket_id, player_id) 
+       VALUES ($1, $2) 
+       ON CONFLICT (socket_id) 
+       DO UPDATE SET 
+         player_id = $2,
+         last_active = NOW()`,
+      [socket.id, userId]
+    );
 
-  console.log("User connected:", userId);
+    console.log(`Socket ${socket.id} connected for player ${userId}`);
+
+    socket.on('disconnect', async () => {
+      await pool.query(
+        `DELETE FROM player_sockets WHERE socket_id = $1`,
+        [socket.id]
+      );
+      console.log(`Socket ${socket.id} disconnected`);
+    });
+  } catch (error) {
+    console.error("Error handling socket connection:", error);
+    socket.emit("error", { message: "Error connecting to server" });
+  }
 
   socket.on("playerData", async (data) => {
     try {
