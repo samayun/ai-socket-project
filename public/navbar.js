@@ -351,4 +351,114 @@ async function initializePlayerData() {
     } catch (error) {
         console.error('Error initializing player data:', error);
     }
-} 
+}
+
+// Check authentication status and update navbar
+async function updateNavbar() {
+  try {
+    const response = await fetch("/api/auth/status");
+    const data = await response.json();
+    
+    const guestButtons = document.querySelector('.guest-buttons');
+    const authButtons = document.querySelector('.auth-buttons');
+    const profileButton = document.getElementById('profile-button');
+    
+    if (data.authenticated) {
+      guestButtons.style.display = 'none';
+      authButtons.style.display = 'flex';
+      
+      // Update profile button text with display name
+      if (profileButton && data.user.display_name) {
+        const profileText = profileButton.querySelector('span:last-child');
+        if (profileText) {
+          profileText.textContent = `👤 ${data.user.display_name}`;
+        }
+      }
+    } else {
+      guestButtons.style.display = 'flex';
+      authButtons.style.display = 'none';
+    }
+  } catch (error) {
+    console.error("Error checking authentication:", error);
+  }
+}
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  // Update navbar on page load
+  updateNavbar();
+  
+  // Sign Up Modal
+  const signupModal = document.getElementById('signup-modal');
+  const signupModalButton = document.getElementById('signup-modal-button');
+  const signupCancel = document.getElementById('signup-cancel');
+  const signupButton = document.getElementById('signup-button');
+  
+  signupModalButton?.addEventListener('click', () => {
+    signupModal.classList.add('is-active');
+  });
+  
+  signupCancel?.addEventListener('click', () => {
+    signupModal.classList.remove('is-active');
+  });
+  
+  // Sign In Modal
+  const signinModal = document.getElementById('signin-modal');
+  const signinModalButton = document.getElementById('signin-modal-button');
+  const signinCancel = document.getElementById('signin-cancel');
+  const signinButton = document.getElementById('signin-button');
+  
+  signinModalButton?.addEventListener('click', () => {
+    signinModal.classList.add('is-active');
+  });
+  
+  signinCancel?.addEventListener('click', () => {
+    signinModal.classList.remove('is-active');
+  });
+  
+  // Logout Button
+  const logoutButton = document.getElementById('logout-button');
+  logoutButton?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  });
+  
+  // Close modals when clicking outside
+  document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.remove('is-active');
+      }
+    });
+  });
+  
+  // Close modals with Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal.is-active').forEach(modal => {
+        modal.classList.remove('is-active');
+      });
+    }
+  });
+  
+  // Close modals with delete button
+  document.querySelectorAll('.modal .delete').forEach(button => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.modal');
+      if (modal) {
+        modal.classList.remove('is-active');
+      }
+    });
+  });
+}); 

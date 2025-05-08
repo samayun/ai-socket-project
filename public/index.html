@@ -3,48 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tic Tac Toe with AI</title>
+    <title>Tic Tac Toe</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <!-- Navbar -->
     <nav class="navbar">
-        <div class="navbar-brand">
-            <a href="/" class="navbar-item">
-                <span class="title">Tic Tac Toe AI</span>
-            </a>
-            <div class="navbar-burger">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-        </div>
-
-        <div class="navbar-menu">
-            <div class="navbar-start">
-                <a href="/" class="navbar-item">Home</a>
-                <a href="/leaderboard.html" class="navbar-item">Leaderboard</a>
+        <div class="container">
+            <div class="navbar-brand">
+                <img src="https://img.poki-cdn.com/cdn-cgi/image/quality=78,width=204,height=204,fit=cover,f=auto/b72f31aa574acaa5cbf6b6c69104c988.png" alt="Tic Tac Toe Logo" class="logo">
+                <a href="/" class="navbar-item">
+                    <span class="title">Tic Tac Toe</span>
+                </a>
+                <div class="navbar-burger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
             </div>
 
-            <div class="navbar-end">
-                <!-- Guest Buttons -->
-                <div class="guest-buttons">
-                    <button class="button is-primary" id="signup-modal-button">Sign Up</button>
-                    <button class="button is-light" id="signin-modal-button">Sign In</button>
+            <div class="navbar-menu">
+                <div class="navbar-start">
+                    <a href="/" class="navbar-item">
+                        <span class="icon">
+                            <i class="fas fa-home"></i>
+                        </span>
+                        <span>🏠 Home</span>
+                    </a>
+                    <a href="#" id="createRoomBtn" class="navbar-item">
+                        <span class="icon">
+                            <i class="fas fa-plus-circle"></i>
+                        </span>
+                        <span>✨ Create Room</span>
+                    </a>
+                    <a href="#" id="joinRoomBtn" class="navbar-item">
+                        <span class="icon">
+                            <i class="fas fa-door-open"></i>
+                        </span>
+                        <span>🚪 Join Room</span>
+                    </a>
                 </div>
 
-                <!-- Authenticated User Buttons -->
-                <div class="auth-buttons" style="display: none;">
-                    <div class="navbar-item has-dropdown">
-                        <a class="navbar-link">
-                            <span class="user-info"></span>
+                <div class="navbar-end">
+                    <!-- Guest Buttons -->
+                    <div class="guest-buttons">
+                        <a href="#" id="signup-modal-button" class="navbar-item">
+                            <span class="icon">
+                                <i class="fas fa-user-plus"></i>
+                            </span>
+                            <span>🌟 Sign Up</span>
                         </a>
-                        <div class="navbar-dropdown">
-                            <a href="/profile.html" class="navbar-item" id="profile-button">My Profile</a>
-                            <hr class="navbar-divider">
-                            <a class="navbar-item" id="logout-button">Logout</a>
-                        </div>
+                        <a href="#" id="signin-modal-button" class="navbar-item">
+                            <span class="icon">
+                                <i class="fas fa-sign-in-alt"></i>
+                            </span>
+                            <span>🔑 Sign In</span>
+                        </a>
+                    </div>
+
+                    <!-- Authenticated User Buttons -->
+                    <div class="auth-buttons" style="display: none;">
+                        <a href="/profile.html" class="navbar-item" id="profile-button">
+                            <span class="icon">
+                                <i class="fas fa-user-circle"></i>
+                            </span>
+                            <span>👤 My Profile</span>
+                        </a>
+                        <a href="#" class="navbar-item" id="logout-button">
+                            <span class="icon">
+                                <i class="fas fa-sign-out-alt"></i>
+                            </span>
+                            <span>🚪 Logout</span>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -129,9 +160,31 @@
         </div>
     </div>
 
+    <!-- Create Room Modal -->
+    <div class="modal" id="create-room-modal">
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Create New Room</p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="create-room-form">
+                    <div class="field">
+                        <label class="label">Room Code</label>
+                        <div class="control">
+                            <input class="input" type="text" id="room-name" placeholder="Enter room code">
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-primary" id="create-room-button">Create Room</button>
+                <button class="button" id="create-room-cancel">Cancel</button>
+            </footer>
+        </div>
+    </div>
+
     <div class="container">
-        <h1>Tic Tac Toe</h1>
-        
         <div class="game-info">
             <div id="status">Player X's turn</div>
             <div id="score">Score - X: 0 | O: 0</div>
@@ -151,13 +204,18 @@
 
         <div class="controls">
             <button id="resetBtn">Reset Board</button>
-            <button id="newGameBtn">New Game</button>
         </div>
 
         <div class="game-analytics">
             <div class="moves-history">
-                <h3>Move History</h3>
-                <div id="movesList"></div>
+                <h3>Game Guideline</h3>
+                <p>
+                    <ul>
+                        <li>Player X is the first to move.</li>
+                        <li>Player O is the second to move.</li>
+                        <li>The game is played on a 3x3 grid.</li>
+                    </ul>
+                </p>
             </div>
             <div class="prediction">
                 <h3>AI Prediction</h3>
@@ -174,10 +232,11 @@
             <div class="game-over-score" id="gameOverScore"></div>
             <div class="game-over-buttons">
                 <button class="game-over-button" id="playAgainBtn">Play Again</button>
-                <button class="game-over-button secondary" id="newGameFromAlertBtn">New Game</button>
+                <!-- <button class="game-over-button secondary" id="newGameFromAlertBtn">New Game</button> -->
             </div>
         </div>
     </div>
+    <div id="toast-container"></div>
 
     <script src="game.js"></script>
     <script src="navbar.js"></script>

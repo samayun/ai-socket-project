@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="toast-container"></div>
+    
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <img src="/images/logo.png" alt="Logo" class="logo">
+                <span class="title">Tic Tac Toe</span>
+            </div>
+            <div class="navbar-menu">
+                <div class="navbar-start">
+                    <a href="/" class="navbar-item">
+                        <i class="fas fa-gamepad icon"></i>
+                        <span>Play Game</span>
+                    </a>
+                    <a href="/profile.html" class="navbar-item">
+                        <i class="fas fa-user icon"></i>
+                        <span>My Profile</span>
+                    </a>
+                </div>
+                <div class="navbar-end">
+                    <span class="navbar-item" id="navDisplayName">Loading...</span>
+                    <button onclick="logout()" class="navbar-item">
+                        <i class="fas fa-sign-out-alt icon"></i>
+                        <span>Logout</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Profile Header -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-800" id="playerName">Loading...</h1>
+                        <p class="text-gray-600" id="playerUsername">@username</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-gray-600">Parent Email</p>
+                        <p class="text-lg font-semibold" id="playerPhone">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow-md p-6 text-center">
+                    <h3 class="text-gray-600 mb-2">Games Played</h3>
+                    <p class="text-3xl font-bold text-blue-600" id="gamesPlayed">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 text-center">
+                    <h3 class="text-gray-600 mb-2">Wins</h3>
+                    <p class="text-3xl font-bold text-green-600" id="wins">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 text-center">
+                    <h3 class="text-gray-600 mb-2">Losses</h3>
+                    <p class="text-3xl font-bold text-red-600" id="losses">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 text-center">
+                    <h3 class="text-gray-600 mb-2">Draws</h3>
+                    <p class="text-3xl font-bold text-yellow-600" id="draws">0</p>
+                </div>
+            </div>
+
+            <!-- Game History -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Game History</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opponent</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Result</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Algorithm</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="gameHistory">
+                            <!-- Game history will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check authentication status
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                document.getElementById('navDisplayName').textContent = data.user.display_name || data.user.username;
+                
+                loadProfileData();
+            } catch (error) {
+                console.error('Error checking authentication:', error);
+                window.location.href = '/login.html';
+            }
+        }
+
+        // Load profile data
+        async function loadProfileData() {
+            try {
+                const response = await fetch('/api/profile');
+                const data = await response.json();
+                
+                // Update profile information
+                document.getElementById('playerName').textContent = data.display_name;
+                document.getElementById('playerUsername').textContent = `@${data.username}`;
+                document.getElementById('playerPhone').textContent = data.parent_email || 'Not provided';
+                
+                // Update statistics
+                document.getElementById('gamesPlayed').textContent = data.games_played || 0;
+                document.getElementById('wins').textContent = data.wins || 0;
+                document.getElementById('losses').textContent = data.losses || 0;
+                document.getElementById('draws').textContent = data.draws || 0;
+                
+                // Update game history
+                const gameHistoryTable = document.getElementById('gameHistory');
+                if (data.game_history && data.game_history.length > 0) {
+                    gameHistoryTable.innerHTML = data.game_history.map(game => `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${new Date(game.created_at).toLocaleDateString()}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                ${game.opponent_name || 'Unknown Player'}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                    ${game.result === 'win' ? 'bg-green-100 text-green-800' : 
+                                      game.result === 'loss' ? 'bg-red-100 text-red-800' : 
+                                      'bg-yellow-100 text-yellow-800'}">
+                                    ${game.result.charAt(0).toUpperCase() + game.result.slice(1)}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${game.score || '-'}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${game.algorithm || 'N/A'}
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    gameHistoryTable.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                                No game history available
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading profile data:', error);
+            }
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login.html';
+                }
+            } catch (error) {
+                console.error('Error logging out:', error);
+            }
+        }
+
+        // Check authentication when page loads
+        document.addEventListener('DOMContentLoaded', checkAuth);
+    </script>
+</body>
+</html> 
