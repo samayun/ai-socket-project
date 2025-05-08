@@ -576,6 +576,48 @@ io.on("connection", (socket) => {
         room.scores,
         room
       );
+
+      // Get player IDs from socket connections
+      const xPlayerResult = await pool.query(
+        `SELECT p.id 
+         FROM player_profiles p
+         JOIN player_sockets s ON p.id = s.player_id
+         WHERE s.socket_id = $1`,
+        [room.playerX]
+      );
+      const oPlayerResult = await pool.query(
+        `SELECT p.id 
+         FROM player_profiles p
+         JOIN player_sockets s ON p.id = s.player_id
+         WHERE s.socket_id = $1`,
+        [room.playerO]
+      );
+
+      const xPlayerId = xPlayerResult.rows[0]?.id;
+      const oPlayerId = oPlayerResult.rows[0]?.id;
+
+      // Determine results for each player
+      const playerXResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
+      const playerOResult = winner === 'O' ? 'win' : winner === 'X' ? 'loss' : 'draw';
+
+      // Store game history for both players
+      if (xPlayerId) {
+        await pool.query(
+          `INSERT INTO game_history 
+           (player_id, opponent_id, result, score, algorithm)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [xPlayerId, oPlayerId, playerXResult, `${room.scores.X}-${room.scores.O}`, prediction?.algorithm || 'default']
+        );
+      }
+
+      if (oPlayerId) {
+        await pool.query(
+          `INSERT INTO game_history 
+           (player_id, opponent_id, result, score, algorithm)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [oPlayerId, xPlayerId, playerOResult, `${room.scores.X}-${room.scores.O}`, prediction?.algorithm || 'default']
+        );
+      }
     } else {
       // Switch players
       room.currentPlayer = room.currentPlayer === "X" ? "O" : "X";
@@ -587,7 +629,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Reset board
   socket.on("resetBoard", (roomId) => {
     const room = gameRooms.get(roomId);
     if (room) {
@@ -601,7 +642,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // New game
+
   socket.on("newGame", (roomId) => {
     const room = gameRooms.get(roomId);
     if (room) {
@@ -790,7 +831,7 @@ io.on("connection", (socket) => {
       // Create new room
       const room = {
         id: roomCode,
-        name: roomName || 'Game Room',
+        name: roomCode || 'Game Room',
         type: 'public',
         board: Array(9).fill(null),
         currentPlayer: 'X',
@@ -802,17 +843,14 @@ io.on("connection", (socket) => {
         createdAt: new Date()
       };
 
-      // Store room in gameRooms Map
       gameRooms.set(roomCode, room);
       
-      // Join the room
+
       socket.join(roomCode);
       
-      // Add player to room
       room.players.add(socket.id);
       room.playerX = socket.id;
 
-      // Get player display name
       let playerName = "Player X";
       try {
         const result = await pool.query(
@@ -828,14 +866,13 @@ io.on("connection", (socket) => {
         console.error("Error fetching player name:", error);
       }
 
-      // Notify the creator
+
       socket.emit('roomCreated', {
         roomCode,
         roomName: room.name,
         playerName
       });
 
-      // Broadcast room creation to all clients
       io.emit('roomListUpdated', Array.from(gameRooms.values()));
 
       console.log('Room created successfully:', {
@@ -863,10 +900,8 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Join the room
     socket.join(roomCode);
     
-    // Add player to room
     const player = {
       id: socket.id,
       name: socket.user?.name || 'Anonymous',
@@ -874,7 +909,6 @@ io.on("connection", (socket) => {
     };
     room.players.push(player);
 
-    // Notify all players in the room
     io.to(roomCode).emit('playerJoined', {
       player,
       room: {
@@ -885,7 +919,6 @@ io.on("connection", (socket) => {
       }
     });
 
-    // If room is full, start the game
     if (room.players.length === 2) {
       room.gameState = {
         board: Array(9).fill(null),
@@ -928,85 +961,26 @@ function checkWinner(board) {
   return null;
 }
 
-// Update player stats in database
-async function updatePlayerStats(fingerprint, result) {
-  try {
-    // Skip if fingerprint is not provided
-    if (!fingerprint || fingerprint === "unknown") {
-      console.log("Skipping player stats update: Invalid fingerprint");
-      return;
-    }
 
-    const resultMap = {
-      win: { wins: 1, losses: 0, draws: 0 },
-      lose: { wins: 0, losses: 1, draws: 0 },
-      draw: { wins: 0, losses: 0, draws: 1 },
-    };
-
-    const stats = resultMap[result] || { wins: 0, losses: 0, draws: 0 };
-
-    // Calculate new skill level based on result
-    const skillChange = result === "win" ? 25 : result === "lose" ? -25 : 0;
-
-    // First check if player exists
-    const playerCheck = await pool.query(
-      "SELECT fingerprint FROM player_profiles WHERE fingerprint = $1",
-      [fingerprint]
-    );
-
-    if (playerCheck.rows.length === 0) {
-      // Create player if doesn't exist
-      await pool.query(
-        `INSERT INTO player_profiles (fingerprint, ip_address, skill_level)
-                 VALUES ($1, $2, $3)`,
-        [fingerprint, "unknown", 1000]
-      );
-      console.log(`Created new player profile for ${fingerprint}`);
-    }
-
-    // Now update the stats
-    await pool.query(
-      `UPDATE player_profiles 
-             SET games_played = games_played + 1,
-                 wins = wins + $1,
-                 losses = losses + $2,
-                 draws = draws + $3,
-                 skill_level = skill_level + $4,
-                 last_played = CURRENT_TIMESTAMP
-             WHERE fingerprint = $5
-             RETURNING skill_level`,
-      [stats.wins, stats.losses, stats.draws, skillChange, fingerprint]
-    );
-
-    console.log(`Updated player stats for ${fingerprint}: ${result}`);
-  } catch (error) {
-    console.error("Error updating player stats:", error);
-  }
-}
-
-// Get player's league tier
 function getLeagueTier(skillLevel) {
   for (const [tier, range] of Object.entries(LEAGUE_TIERS)) {
     if (skillLevel >= range.min && skillLevel <= range.max) {
       return tier;
     }
   }
-  return "BRONZE"; // Default tier
+  return "BRONZE";
 }
 
-// Store game state in database
+
 async function storeGameState(boardState, nextMove, result, playerId, roomId, algorithm, scores, room) {
   try {
-    // Convert board state to string format without commas
     const boardStateStr = boardState.map(cell => cell || ' ').join('');
 
-    // Ensure required fields are provided
     if (!playerId || !roomId || !scores || !room) {
       console.error("Cannot store game state: playerId, roomId, scores, and room are required");
       return;
     }
 
-    // Get player skill levels
     const playerXSkillResult = await pool.query(
       "SELECT skill_level FROM player_profiles WHERE id = $1",
       [room.player_x_id]
@@ -1019,16 +993,14 @@ async function storeGameState(boardState, nextMove, result, playerId, roomId, al
     const playerXSkillLevel = playerXSkillResult.rows[0]?.skill_level || 0;
     const playerOSkillLevel = playerOSkillResult.rows[0]?.skill_level || 0;
 
-    // Determine results for each player
     const winner = checkWinner(boardState);
     const playerXGameResult = winner === 'X' ? 'win' : winner === 'O' ? 'loss' : 'draw';
     const playerOGameResult = winner === 'O' ? 'win' : winner === 'X' ? 'loss' : 'draw';
     const finalScore = `${scores.X}-${scores.O}`;
 
-    // Extract the prediction value from nextMove object
+
     const nextMoveValue = typeof nextMove === 'object' ? nextMove.prediction : nextMove;
 
-    // Store game state
     await pool.query(
       `INSERT INTO game_states 
        (board_state, next_move, result, player_id, skill_level, algorithm, room_id, 
@@ -1094,13 +1066,11 @@ async function storeGameState(boardState, nextMove, result, playerId, roomId, al
   }
 }
 
-// Enhanced prediction function
 async function predictNextMove(board, playerId) {
   try {
-    // Ensure playerId is a string
+
     const playerIdStr = String(playerId);
 
-    // Get player's skill level
     const playerResult = await pool.query(
       "SELECT skill_level FROM player_profiles WHERE id = $1",
       [playerIdStr]
@@ -1167,7 +1137,7 @@ async function predictNextMove(board, playerId) {
   }
 }
 
-// Get algorithm-based prediction
+
 async function getAlgorithmPrediction(board, algorithm) {
   try {
     let prediction;
@@ -1218,17 +1188,15 @@ function createGameRoom(roomId) {
   };
 }
 
-// Authentication endpoints
+
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { username, password, display_name, age, parent_email } = req.body;
 
-    // Validate required fields
     if (!username || !password || !display_name || !age || !parent_email) {
       return res.status(400).json({ success: false, error: "All fields are required" });
     }
 
-    // Check if username already exists
     const existingUser = await pool.query(
       "SELECT * FROM player_profiles WHERE username = $1",
       [username]
@@ -1274,15 +1242,12 @@ app.post("/api/auth/signup", async (req, res) => {
 app.post("/api/auth/signin", async (req, res) => {
   try {
     const { username, password } = req.body;
-
-    // Validate required fields
     if (!username || !password) {
       return res
         .status(400)
         .json({ success: false, error: "Username and password are required" });
     }
 
-    // Find user
     const result = await pool.query(
       "SELECT * FROM player_profiles WHERE username = $1",
       [username]
@@ -1293,10 +1258,8 @@ app.post("/api/auth/signin", async (req, res) => {
         .status(401)
         .json({ success: false, error: "Invalid username or password" });
     }
-
     const user = result.rows[0];
 
-    // Verify password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res
@@ -1304,7 +1267,6 @@ app.post("/api/auth/signin", async (req, res) => {
         .json({ success: false, error: "Invalid username or password" });
     }
 
-    // Create session
     req.session.userId = user.id;
     req.session.username = user.username;
 
@@ -1383,26 +1345,15 @@ app.get("/api/profile", async (req, res) => {
     // Get game history as both X and O player
     const historyResult = await pool.query(
       `SELECT 
-        gs.created_at,
-        CASE 
-          WHEN gs.player_x_id = $1 THEN 'X'
-          WHEN gs.player_o_id = $1 THEN 'O'
-        END as player_role,
-        CASE 
-          WHEN gs.player_x_id = $1 THEN gs.player_x_result
-          WHEN gs.player_o_id = $1 THEN gs.player_o_result
-        END as result,
-        gs.final_score as score,
-        gs.algorithm,
-        CASE 
-          WHEN gs.player_x_id = $1 THEN pp_o.display_name
-          WHEN gs.player_o_id = $1 THEN pp_x.display_name
-        END as opponent_name
-       FROM game_states gs
-       LEFT JOIN player_profiles pp_x ON gs.player_x_id = pp_x.id
-       LEFT JOIN player_profiles pp_o ON gs.player_o_id = pp_o.id
-       WHERE gs.player_x_id = $1 OR gs.player_o_id = $1
-       ORDER BY gs.created_at DESC
+        gh.created_at,
+        gh.result,
+        gh.score,
+        gh.algorithm,
+        pp.display_name as opponent_name
+       FROM game_history gh
+       LEFT JOIN player_profiles pp ON gh.opponent_id = pp.id
+       WHERE gh.player_id = $1
+       ORDER BY gh.created_at DESC
        LIMIT 50`,
       [userId]
     );

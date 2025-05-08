@@ -1,4 +1,4 @@
--- Drop existing tables if they exist
+
 DROP TABLE IF EXISTS game_history CASCADE;
 DROP TABLE IF EXISTS game_states CASCADE;
 DROP TABLE IF EXISTS player_sockets CASCADE;
@@ -6,7 +6,7 @@ DROP TABLE IF EXISTS player_profiles CASCADE;
 DROP TABLE IF EXISTS room_invitations CASCADE;
 DROP TABLE IF EXISTS rooms CASCADE;
 
--- Create player profiles table
+
 CREATE TABLE IF NOT EXISTS player_profiles (
     id VARCHAR(50) PRIMARY KEY,
     username VARCHAR(50) UNIQUE,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS player_profiles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create player sockets table
+
 CREATE TABLE IF NOT EXISTS player_sockets (
     socket_id VARCHAR(100) PRIMARY KEY,
     player_id VARCHAR(50) REFERENCES player_profiles(id) ON DELETE CASCADE,
@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS player_sockets (
     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create game states table
 CREATE TABLE IF NOT EXISTS game_states (
     id SERIAL PRIMARY KEY,
     room_id VARCHAR(50),
@@ -49,7 +48,7 @@ CREATE TABLE IF NOT EXISTS game_states (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create game history table
+
 CREATE TABLE IF NOT EXISTS game_history (
     id SERIAL PRIMARY KEY,
     player_id VARCHAR(50) REFERENCES player_profiles(id) ON DELETE CASCADE,
@@ -60,7 +59,6 @@ CREATE TABLE IF NOT EXISTS game_history (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create rooms table
 CREATE TABLE rooms (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -73,7 +71,7 @@ CREATE TABLE rooms (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create room_invitations table
+
 CREATE TABLE room_invitations (
     id SERIAL PRIMARY KEY,
     room_id VARCHAR(50) REFERENCES rooms(id),
@@ -88,7 +86,6 @@ CREATE TABLE room_invitations (
     UNIQUE (room_id, invited_email) WHERE invited_email IS NOT NULL
 );
 
--- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_player_sockets_player_id ON player_sockets(player_id);
 CREATE INDEX IF NOT EXISTS idx_game_history_player_id ON game_history(player_id);
 CREATE INDEX IF NOT EXISTS idx_game_history_created_at ON game_history(created_at);

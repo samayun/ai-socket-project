@@ -23,12 +23,12 @@ const scoreElement = document.getElementById('score');
 const movesListElement = document.getElementById('movesList');
 const predictionInfoElement = document.getElementById('predictionInfo');
 const resetButton = document.getElementById('resetBtn');
-const newGameButton = document.getElementById('newGameBtn');
+// const newGameButton = document.getElementById('newGameBtn');
 const gameOverAlert = document.getElementById('gameOverAlert');
 const gameOverWinner = document.getElementById('gameOverWinner');
 const gameOverScore = document.getElementById('gameOverScore');
 const playAgainBtn = document.getElementById('playAgainBtn');
-const newGameFromAlertBtn = document.getElementById('newGameFromAlertBtn');
+// const newGameFromAlertBtn = document.getElementById('newGameFromAlertBtn');
 
 // Room management
 function generateRoomId() {
@@ -142,33 +142,28 @@ function updatePrediction(prediction) {
   }
 }
 
-// Show game over alert
+
 function showGameOverAlert(winner, scores, playerXName, playerOName) {
   const gameOverAlert = document.getElementById('gameOverAlert');
   const gameOverWinner = document.getElementById('gameOverWinner');
   const gameOverScore = document.getElementById('gameOverScore');
-  
-  // Ensure we have valid names
+
   const xName = playerXName || "Player X";
   const oName = playerOName || "Player O";
-  
-  // Update the content
+
   gameOverWinner.textContent = winner ? `🎉 ${winner === "X" ? xName : oName} Won!` : "Game Draw!";
   gameOverScore.textContent = `Final Score: ${xName}: ${scores.X || 0} | ${oName}: ${scores.O || 0}`;
-  
-  // Show the alert
+
   gameOverAlert.classList.add('show');
   
-  // Add confetti effect for winner
   if (winner) {
     createConfetti();
   }
   
-  // Add event listener for Escape key
   document.addEventListener('keydown', handleEscapeKey);
 }
 
-// Create confetti effect
+
 function createConfetti() {
   const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
   const container = document.body;
@@ -181,14 +176,13 @@ function createConfetti() {
     confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
     container.appendChild(confetti);
     
-    // Remove confetti after animation
     setTimeout(() => {
       confetti.remove();
     }, 3000);
   }
 }
 
-// Handle Escape key
+
 function handleEscapeKey(event) {
   if (event.key === 'Escape') {
     hideGameOverAlert();
@@ -202,53 +196,6 @@ function hideGameOverAlert() {
   document.removeEventListener('keydown', handleEscapeKey);
 }
 
-// Generate a unique fingerprint for the player
-function generateFingerprint() {
-  // Check if we already have a fingerprint in localStorage
-  let fingerprint = localStorage.getItem('playerFingerprint');
-  
-  if (!fingerprint) {
-    // Generate a new fingerprint
-    fingerprint = 'player_' + Math.random().toString(36).substring(2, 15) + 
-                 '_' + Date.now().toString(36);
-    
-    // Store in localStorage
-    localStorage.setItem('playerFingerprint', fingerprint);
-  }
-  
-  return fingerprint;
-}
-
-// Get player's IP address
-async function getPlayerIP() {
-  try {
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = await response.json();
-    return data.ip;
-  } catch (error) {
-    console.error('Error getting IP address:', error);
-    return 'unknown';
-  }
-}
-
-// Initialize player data
-async function initializePlayerData() {
-  gameState.playerFingerprint = generateFingerprint();
-  gameState.playerName = prompt('Please enter your name:');
-  gameState.ipAddress = await getPlayerIP();
-  
-  // Send player data to server
-  socket.emit('playerData', {
-    fingerprint: gameState.playerFingerprint,
-    ipAddress: gameState.ipAddress,
-    name: gameState.playerName
-  });
-}
-
-// Call this function when the page loads
-document.addEventListener('DOMContentLoaded', () => {
-  initializePlayerData();
-});
 
 // Handle cell click
 function handleCellClick(position) {
@@ -285,11 +232,11 @@ resetButton.addEventListener('click', () => {
   }
 });
 
-newGameButton.addEventListener('click', () => {
-  if (gameState.roomId) {
-    socket.emit('newGame', gameState.roomId);
-  }
-});
+// newGameButton.addEventListener('click', () => {
+//   if (gameState.roomId) {
+//     socket.emit('newGame', gameState.roomId);
+//   }
+// });
 
 playAgainBtn.addEventListener('click', () => {
   hideGameOverAlert();
@@ -298,12 +245,12 @@ playAgainBtn.addEventListener('click', () => {
   }
 });
 
-newGameFromAlertBtn.addEventListener('click', () => {
-  hideGameOverAlert();
-  if (gameState.roomId) {
-    socket.emit('newGame', gameState.roomId);
-  }
-});
+// newGameFromAlertBtn.addEventListener('click', () => {
+//   hideGameOverAlert();
+//   if (gameState.roomId) {
+//     socket.emit('newGame', gameState.roomId);
+//   }
+// });
 
 // Socket.IO event handlers
 socket.on('playerJoined', (data) => {
