@@ -241,27 +241,63 @@ function hideGameOverAlert() {
 }
 
 
+function showToast(message, type = 'info') {
+  console.log('showToast', message, type);
+  const toastContainer = document.getElementById('toast-container');
+  
+  const toast = document.createElement('div');
+  toast.className = `px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 ${
+    type === 'error' ? 'bg-red-500' : 
+    type === 'success' ? 'bg-green-500' : 
+    'bg-blue-500'
+  }`;
+
+  // Add emoji based on type
+  const emoji = type === 'error' ? '😢' : 
+                type === 'success' ? '🎉' : 
+                '🎮';
+  
+  toast.textContent = `${emoji} ${message}`;
+  
+  toastContainer.appendChild(toast);
+  
+  // Add show class to trigger animation
+  requestAnimationFrame(() => {
+    toast.classList.add('show');
+  });
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.add('hide');
+    setTimeout(() => {
+      toast.remove();
+    }, 600); // Match animation duration
+  }, 3000);
+}
+
 // Handle cell click
 function handleCellClick(position) {
   if (!gameState.roomId) {
-    sounds.error.play().then().catch();
-    alert('Please join a room first');
+    showToast('Please join a room first', 'error');
+    // sounds.error.play().then().catch();
     return;
   }
   
   if (gameState.board[position] || gameState.gameStatus === 'over') {
-    sounds.error.play().then().catch();
+    showToast('Invalid move', 'error');
+    // sounds.error.play().then().catch();
     return;
   }
   
   // Check if it's the player's turn using IDs
   if ((gameState.currentPlayer === gameState.playerXId && !gameState.isPlayerX) || 
       (gameState.currentPlayer === gameState.playerOId && !gameState.isPlayerO)) {
-    sounds.error.play().then().catch();
+    showToast('Not your turn!', 'error');
+    // sounds.error.play().then().catch();
     return;
   }
   
-  sounds.move.play().then().catch();
+  // sounds.move.play().then().catch();
   socket.emit('makeMove', {
     roomId: gameState.roomId,
     position,
@@ -420,15 +456,16 @@ socket.on('playerLeft', (data) => {
 });
 
 socket.on('invalidMove', (data) => {
-  data.message && alert(data.message);
+  showToast(data.message || 'Invalid move', 'error');
+  // sounds.error.play().then().catch();
 });
 
 socket.on('error', (data) => {
   if (data.message === "Please sign in to play") {
-    // Redirect to login page or show login modal
     window.location.href = "/login.html";
   } else {
-    data.message && alert(data.message);
+    showToast(data.message || 'An error occurred', 'error');
+    // sounds.error.play().then().catch();
   }
 });
 
@@ -518,6 +555,7 @@ function joinRoomWithCode() {
   const roomCode = prompt('Enter room code:');
   if (roomCode) {
     joinRoom(roomCode.toUpperCase());
+    showToast('Joining room...', 'info');
   }
 }
 
@@ -582,7 +620,7 @@ function generateRoomCode() {
 function handleCreateRoom(event) {
     event.preventDefault();
     const roomName = roomNameInput.value.trim() || generateRoomCode();
-    const roomCode = roomName; // Use the room name as the room code
+    const roomCode = roomName;
     
     console.log('Creating room:', { roomName, roomCode });
     
@@ -592,7 +630,8 @@ function handleCreateRoom(event) {
     }, (error) => {
         if (error) {
             console.error('Error creating room:', error);
-            error.message && alert(error.message || 'Failed to create room');
+            showToast(error.message || 'Failed to create room', 'error');
+            // sounds.error.play().then().catch();
         }
     });
 
@@ -635,39 +674,44 @@ socket.on('roomCreated', (data) => {
     const { roomCode } = data;
     
     if (!roomCode) {
-        console.error('No room code received');
-        alert('Error: No room code received');
+        showToast('Error: No room code received', 'error');
+        // sounds.error.play().then().catch();
         return;
     }
     
-    // Show success message with room code
-    alert(`Room created successfully!\nRoom Code: ${roomCode}`);
-    
-    // Redirect to the room
+    showToast(`Room created successfully! Room Code: ${roomCode}`, 'success');
     window.location.href = '/?room=' + roomCode;
 });
 
 socket.on('error', (data) => {
-    console.error('Socket error:', data);
-    data.message && alert(data.message || 'An error occurred');
+  if(data instanceof Error) {
+    showToast(data?.message || 'An error occurred', 'error');
+    console.error('Socket Error:', data?.message);
+  } else {
+    showToast(data?.message || 'An error occurred', 'error');
+    console.error('Socket error:', data?.message);
+  }
+    // sounds.error.play().then().catch();
 });
 
 // Add connection status handlers
 socket.on('connect', () => {
     console.log('Connected to server with socket ID:', socket.id);
+    showToast('Connected to server', 'success');
 });
 
 socket.on('disconnect', () => {
     console.log('Socket disconnected');
+    showToast('Disconnected from server', 'error');
 });
 
 socket.on('connect_error', (error) => {
     console.error('Connection error:', error);
     if (error.message === 'No player ID provided') {
-        // Redirect to login or show error
         window.location.href = '/login.html';
     }
-    alert('Failed to connect to server');
+    showToast('Failed to connect to server', 'error');
+    // sounds.error.play().then().catch();
 });
 
 function updatePlayerNames() {
@@ -690,3 +734,5 @@ function updatePlayerNames() {
     </div>
   `;
 } 
+
+

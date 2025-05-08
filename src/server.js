@@ -33,7 +33,7 @@ const sessionMiddleware = session({
     tableName: 'user_sessions',
     createTableIfMissing: true
   }),
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  secret: process.env.SESSION_SECRET || 'CHAOS IS A LADDER',
   resave: false,
   saveUninitialized: false,
   rolling: true,
@@ -41,9 +41,9 @@ const sessionMiddleware = session({
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   },
-  name: 'userId'
+  name: 'playerId'
 });
 
 // Apply session middleware
@@ -311,9 +311,9 @@ function getOpponentPlayer(board) {
 
 io.on("connection", async (socket) => {
   const session = socket.request.session;
-  const userId = session?.userId;
+  const playerId = session?.playerId;
 
-  if (!userId) {
+  if (!playerId) {
     console.log("No authenticated user found");
     socket.disconnect();
     return;
@@ -326,10 +326,10 @@ io.on("connection", async (socket) => {
        DO UPDATE SET 
          player_id = $2,
          last_active = NOW()`,
-      [socket.id, userId]
+      [socket.id, playerId]
     );
 
-    console.log(`Socket ${socket.id} connected for player ${userId}`);
+    console.log(`Socket ${socket.id} connected for player ${playerId}`);
 
     socket.on('disconnect', async () => {
       await pool.query(
@@ -347,7 +347,7 @@ io.on("connection", async (socket) => {
     try {
       const session = socket.request.session;
 
-      if (!session?.userId) {
+      if (!session?.playerId) {
         socket.emit("error", { message: "Please sign in to play" });
         return;
       }
@@ -355,7 +355,7 @@ io.on("connection", async (socket) => {
       // First check if player exists
       const playerExists = await pool.query(
         "SELECT id, username, display_name FROM player_profiles WHERE id = $1",
-        [session.userId]
+        [session.playerId]
       );
 
       if (playerExists.rows.length === 0) {
@@ -371,7 +371,7 @@ io.on("connection", async (socket) => {
          DO UPDATE SET 
            player_id = EXCLUDED.player_id,
            last_active = NOW()`,
-        [socket.id, session.userId]
+        [socket.id, session.playerId]
       );
 
       // Return player data
@@ -382,7 +382,7 @@ io.on("connection", async (socket) => {
 
       console.log("Player data stored successfully:", {
         socketId: socket.id,
-        playerId: session.userId,
+        playerId: session.playerId,
         username: playerExists.rows[0].username
       });
 
@@ -393,7 +393,7 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("joinRoom", async (roomId) => {
-    const session = socket.request.session?.userId;
+    const session = socket.request.session?.playerId;
     if (!session) {
       socket.emit("error", { message: "Please sign in to play" });
       return;
@@ -480,7 +480,7 @@ io.on("connection", async (socket) => {
   socket.on("makeMove", async (data) => {
     // Check authentication
     const session = socket.request.session;
-    if (!session?.userId) {
+    if (!session?.playerId) {
       socket.emit("error", { message: "Please sign in to play" });
         return;
       }
@@ -592,7 +592,7 @@ io.on("connection", async (socket) => {
         room.board,
         prediction,
         winner ? 'win' : 'draw',
-        session.userId,
+        session.playerId,
         roomId,
         prediction?.algorithm || 'default',
         room.scores,
@@ -766,21 +766,8 @@ io.on("connection", async (socket) => {
         [roomId, xPlayerId, oPlayerId, room.board.join(''), winner, playerXResult, playerOResult, `${scores.X}-${scores.O}`, data.algorithm]
       );
 
-      // Update player statistics and store game history
+      // Store game history for both players
       if (xPlayerId) {
-        // Update player X stats
-        await pool.query(
-          `UPDATE player_profiles 
-           SET games_played = games_played + 1,
-               wins = wins + ${playerXResult === 'win' ? 1 : 0},
-               losses = losses + ${playerXResult === 'loss' ? 1 : 0},
-               draws = draws + ${playerXResult === 'draw' ? 1 : 0},
-               last_seen = NOW()
-           WHERE id = $1`,
-          [xPlayerId]
-        );
-
-        // Store game history for player X
         await pool.query(
           `INSERT INTO game_history 
            (player_id, opponent_id, result, score, algorithm)
@@ -790,19 +777,6 @@ io.on("connection", async (socket) => {
       }
 
       if (oPlayerId) {
-        // Update player O stats
-        await pool.query(
-          `UPDATE player_profiles 
-           SET games_played = games_played + 1,
-               wins = wins + ${playerOResult === 'win' ? 1 : 0},
-               losses = losses + ${playerOResult === 'loss' ? 1 : 0},
-               draws = draws + ${playerOResult === 'draw' ? 1 : 0},
-               last_seen = NOW()
-           WHERE id = $1`,
-          [oPlayerId]
-        );
-
-        // Store game history for player O
         await pool.query(
           `INSERT INTO game_history 
            (player_id, opponent_id, result, score, algorithm)
@@ -836,10 +810,10 @@ io.on("connection", async (socket) => {
 
   socket.on('createRoom', async ({ roomName, roomCode }) => {
     try {
-      console.log('Creating room:', { roomName, roomCode, userId });
+      console.log('Creating room:', { roomName, roomCode, playerId });
       
       // Check authentication
-      if (!session?.userId) {
+      if (!session?.playerId) {
         socket.emit('error', { message: 'Please sign in to create a room' });
         return;
       }
@@ -879,7 +853,7 @@ io.on("connection", async (socket) => {
           `SELECT p.display_name 
            FROM player_profiles p
            WHERE p.id = $1`,
-          [session.userId]
+          [session.playerId]
         );
         if (result.rows.length > 0) {
           playerName = result.rows[0].display_name;
@@ -900,7 +874,7 @@ io.on("connection", async (socket) => {
       console.log('Room created successfully:', {
         roomCode,
         roomName: room.name,
-        playerId: session.userId
+        playerId: session.playerId
       });
 
     } catch (error) {
@@ -1229,7 +1203,7 @@ app.post("/api/auth/signup", async (req, res) => {
     }
 
     // Generate a unique ID
-    const userId = crypto.randomUUID();
+    const playerId = crypto.randomUUID();
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -1240,11 +1214,11 @@ app.post("/api/auth/signup", async (req, res) => {
        (id, username, password, display_name, age, parent_email, games_played, wins, losses, draws) 
        VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 0, 0) 
        RETURNING id, username, display_name`,
-      [userId, username, hashedPassword, display_name, age, parent_email]
+      [playerId, username, hashedPassword, display_name, age, parent_email]
     );
 
     // Create session
-    req.session.userId = result.rows[0].id;
+    req.session.playerId = result.rows[0].id;
     req.session.username = result.rows[0].username;
 
     res.json({
@@ -1289,7 +1263,7 @@ app.post("/api/auth/signin", async (req, res) => {
         .json({ success: false, error: "Invalid username or password" });
     }
 
-    req.session.userId = user.id;
+    req.session.playerId = user.id;
     req.session.username = user.username;
 
     res.json({
@@ -1308,13 +1282,13 @@ app.post("/api/auth/signin", async (req, res) => {
 
 app.get("/api/auth/status", async (req, res) => {
   try {
-    if (!req.session?.userId) {
+    if (!req.session?.playerId) {
       return res.json({ authenticated: false });
     }
 
     const result = await pool.query(
       "SELECT id, username, display_name FROM player_profiles WHERE id = $1",
-      [req.session.userId]
+      [req.session.playerId]
     );
 
     if (result.rows.length === 0) {
@@ -1347,95 +1321,68 @@ app.post("/api/auth/logout", (req, res) => {
   });
 });
 
-// Profile endpoints
+
 app.get("/api/profile", async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const playerId = req.session.playerId;
 
-    if (!userId) {
+    if (!playerId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    // Get player profile
-    const profileResult = await pool.query(
-      `SELECT id, username, display_name, games_played, wins, losses, draws, skill_level
-       FROM player_profiles
-       WHERE id = $1`,
-      [userId]
+    const result = await pool.query(
+      `WITH player_stats AS (
+        SELECT 
+          COUNT(*) as total_games,
+          SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as total_wins,
+          SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as total_losses,
+          SUM(CASE WHEN result = 'draw' THEN 1 ELSE 0 END) as total_draws
+        FROM game_history
+        WHERE player_id = $1
+      )
+      SELECT 
+        p.id,
+        p.username,
+        p.display_name,
+        p.skill_level,
+        p.parent_email,
+        COALESCE(ps.total_games, 0) as games_played,
+        COALESCE(ps.total_wins, 0) as wins,
+        COALESCE(ps.total_losses, 0) as losses,
+        COALESCE(ps.total_draws, 0) as draws,
+        json_agg(
+          json_build_object(
+            'created_at', gh.created_at,
+            'result', gh.result,
+            'score', gh.score,
+            'algorithm', gh.algorithm,
+            'opponent_name', opp.display_name
+          ) ORDER BY gh.created_at DESC
+        ) FILTER (WHERE gh.id IS NOT NULL) as game_history
+      FROM player_profiles p
+      LEFT JOIN player_stats ps ON true
+      LEFT JOIN game_history gh ON gh.player_id = p.id
+      LEFT JOIN player_profiles opp ON gh.opponent_id = opp.id
+      WHERE p.id = $1
+      GROUP BY p.id, p.username, p.display_name, p.skill_level, p.parent_email, 
+               ps.total_games, ps.total_wins, ps.total_losses, ps.total_draws`,
+      [playerId]
     );
 
-    if (profileResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: "Player not found" });
     }
 
-    // Get game history as both X and O player
-    const historyResult = await pool.query(
-      `SELECT 
-        gh.created_at,
-        gh.result,
-        gh.score,
-        gh.algorithm,
-        pp.display_name as opponent_name
-       FROM game_history gh
-       LEFT JOIN player_profiles pp ON gh.opponent_id = pp.id
-       WHERE gh.player_id = $1
-       ORDER BY gh.created_at DESC
-       LIMIT 50`,
-      [userId]
-    );
+    const profile = result.rows[0];
+    profile.game_history = profile.game_history || [];
 
-    res.json({
-      ...profileResult.rows[0],
-      game_history: historyResult.rows
-    });
+    res.json(profile);
   } catch (error) {
     console.error("Error fetching profile:", error);
     res.status(500).json({ error: "Error fetching profile" });
   }
 });
 
-app.get("/api/profile/history", async (req, res) => {
-  try {
-    const userId = req.session.userId;
-
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    // Get game history with player information
-    const result = await pool.query(
-      `SELECT 
-        gs.id,
-        gs.created_at,
-        gs.result,
-        gs.algorithm,
-        gs.player_id,
-        gs.skill_level,
-        pp.display_name as player_name
-       FROM game_states gs
-       LEFT JOIN player_profiles pp ON gs.player_id = pp.id
-       WHERE gs.player_id = $1
-       ORDER BY gs.created_at DESC
-       LIMIT 50`,
-      [userId]
-    );
-
-    // Transform the results to include opponent information
-    const history = result.rows.map(game => ({
-      id: game.id,
-      created_at: game.created_at,
-      result: game.result,
-      algorithm: game.algorithm,
-      player_name: game.player_name,
-      skill_level: game.skill_level
-    }));
-
-    res.json(history);
-  } catch (error) {
-    console.error("Error fetching game history:", error);
-    res.status(500).json({ error: "Error fetching game history" });
-  }
-});
 
 const PORT = process.env.PORT || 3000;
 
