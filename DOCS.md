@@ -43,7 +43,6 @@ AI Project
 │   └── PostgreSQL interface
 ├── Database (PostgreSQL)
 │   ├── Vector embeddings
-│   ├── pg_cron for scheduled tasks
 │   └── Traditional relational data
 ├── Frontend
 │   ├── Real-time UI
@@ -65,7 +64,7 @@ AI Project
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
+git clone git@github.com:samayun/ai-socket-project.git
 cd ai-project
 ```
 
@@ -76,11 +75,14 @@ cp .env.example .env
 
 3. Configure environment variables:
 ```env
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
+NODE_ENV=development
+PORT=3000
 DB_HOST=localhost
-DB_PORT=5434
-DB_NAME=tic_tac_toe
+DB_PORT=5435
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=ai_project 
+
 ```
 
 4. Start with Docker:
@@ -96,26 +98,117 @@ npm run dev
 
 ### Access Points
 - Backend API: http://localhost:3000
-- PostgreSQL: localhost:5434
+- PostgreSQL: postgresql://postgres:postgres@localhost:5435/ai_project
 - pgAdmin: http://localhost:5050
 
 ## API Documentation
 
 ### REST Endpoints
 
-#### Player Management
+#### Authentication Endpoints
+
+##### Sign Up
 ```http
-POST /api/players/register
+POST /api/auth/signup
 Content-Type: application/json
 
 {
   "username": "string",
   "password": "string",
-  "display_name": "string"
+  "display_name": "string",
+  "age": number,
+  "parent_email": "string"
+}
+
+Response:
+{
+  "success": boolean,
+  "user": {
+    "id": "string",
+    "username": "string",
+    "display_name": "string"
+  }
 }
 ```
 
-#### Room Management
+##### Sign In
+```http
+POST /api/auth/signin
+Content-Type: application/json
+
+{
+  "username": "string",
+  "password": "string"
+}
+
+Response:
+{
+  "success": boolean,
+  "user": {
+    "id": "string",
+    "username": "string",
+    "display_name": "string"
+  }
+}
+```
+
+##### Check Authentication Status
+```http
+GET /api/auth/status
+
+Response:
+{
+  "authenticated": boolean,
+  "user": {
+    "id": "string",
+    "username": "string",
+    "display_name": "string"
+  }
+}
+```
+
+##### Logout
+```http
+POST /api/auth/logout
+
+Response:
+{
+  "success": boolean
+}
+```
+
+#### Profile Endpoints
+
+##### Get Player Profile
+```http
+GET /api/profile
+
+Response:
+{
+  "id": "string",
+  "username": "string",
+  "display_name": "string",
+  "skill_level": number,
+  "parent_email": "string",
+  "games_played": number,
+  "wins": number,
+  "losses": number,
+  "draws": number,
+  "game_history": [
+    {
+      "created_at": "timestamp",
+      "result": "string",
+      "score": "string",
+      "algorithm": "string",
+      "opponent_name": "string"
+    }
+  ]
+}
+```
+
+#### Room Management Endpoints
+
+##### Create Room
 ```http
 POST /api/rooms/create
 Content-Type: application/json
@@ -124,21 +217,135 @@ Content-Type: application/json
   "name": "string",
   "is_private": boolean
 }
+
+Response:
+{
+  "success": boolean,
+  "room": {
+    "id": "string",
+    "name": "string",
+    "status": "string",
+    "player_count": number
+  }
+}
 ```
 
-### WebSocket Events
+##### Join Room
+```http
+POST /api/rooms/join
+Content-Type: application/json
 
-#### Client to Server
-- `joinRoom`: Join a game room
-- `makeMove`: Make a game move
-- `resetBoard`: Reset the game board
-- `leaveRoom`: Leave the current room
+{
+  "roomId": "string"
+}
 
-#### Server to Client
-- `playerJoined`: Player joined notification
-- `moveMade`: Move made notification
-- `gameOver`: Game over notification
-- `error`: Error notification
+Response:
+{
+  "success": boolean,
+  "room": {
+    "id": "string",
+    "name": "string",
+    "status": "string",
+    "player_count": number,
+    "board": array,
+    "currentPlayer": "string"
+  }
+}
+```
+
+##### Leave Room
+```http
+POST /api/rooms/leave
+Content-Type: application/json
+
+{
+  "roomId": "string"
+}
+
+Response:
+{
+  "success": boolean
+}
+```
+
+#### Game Management Endpoints
+
+##### Make Move
+```http
+POST /api/game/move
+Content-Type: application/json
+
+{
+  "roomId": "string",
+  "position": number,
+  "player": "X" | "O"
+}
+
+Response:
+{
+  "success": boolean,
+  "board": array,
+  "currentPlayer": "string",
+  "winner": "string" | null
+}
+```
+
+##### Reset Game
+```http
+POST /api/game/reset
+Content-Type: application/json
+
+{
+  "roomId": "string"
+}
+
+Response:
+{
+  "success": boolean,
+  "board": array,
+  "currentPlayer": "string"
+}
+```
+
+### Error Responses
+
+All endpoints may return the following error responses:
+
+```http
+400 Bad Request
+{
+  "success": false,
+  "error": "Error message"
+}
+
+401 Unauthorized
+{
+  "success": false,
+  "error": "Not authenticated"
+}
+
+404 Not Found
+{
+  "success": false,
+  "error": "Resource not found"
+}
+
+500 Internal Server Error
+{
+  "success": false,
+  "error": "Internal server error"
+}
+```
+
+### Authentication
+
+Most endpoints require authentication. Include the session cookie in your requests. The server uses session-based authentication.
+
+### Rate Limiting
+
+API endpoints are rate-limited to prevent abuse:
+- 100 requests per minute for authenticated users
+- 20 requests per minute for unauthenticated users
 
 ## Database Schema
 
